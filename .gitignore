@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+
+# 运行记录（日志、试色板临时图、素材体检缓存）
+运行记录/
+
+# 个人设置与本地清单（首次运行自动生成，不入库）
+程序/config.json
+程序/lut_fav.json
+程序/lut_hidden.json
+
+# 编译中间产物
+/tmp/LUTBatch_build

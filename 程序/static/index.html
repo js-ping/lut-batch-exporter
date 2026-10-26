@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LUT 批量导出器</title>
+<style>
+:root{
+  --bg:#0b0d10; --panel:#14171c; --panel2:#181c22; --line:#242a33; --line2:#2f3742;
+  --txt:#e8ecf2; --dim:#8d97a6; --dim2:#5f6875;
+  --acc:#e0a35c; --acc2:#c8833c; --acc-dim:rgba(224,163,92,.12);
+  --ok:#5cbf8b; --err:#e2685c; --blue:#5a8cdc; --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--txt);
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+  -webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(1100px 500px at 12% -10%,rgba(224,163,92,.07),transparent 60%),
+                   radial-gradient(900px 420px at 92% 0%,rgba(90,130,200,.05),transparent 60%);
+}
+.wrap{max-width:1360px;margin:0 auto;padding:0 26px 130px}
+
+/* ---------- header ---------- */
+header{display:flex;align-items:center;gap:16px;padding:24px 0 20px;border-bottom:1px solid var(--line)}
+.logo{width:36px;height:36px;border-radius:10px;flex:none;
+  background:linear-gradient(145deg,#e8b271,#b8752f);
+  display:grid;place-items:center;color:#20160a;font-weight:800;font-size:15px;letter-spacing:-.5px;
+  box-shadow:0 4px 18px rgba(200,131,60,.28)}
+h1{font-size:17px;font-weight:650;letter-spacing:.2px}
+h1 small{font-weight:400;color:var(--dim2);font-size:11px;margin-left:8px;letter-spacing:0}
+.sub{color:var(--dim);font-size:12.5px;margin-top:2px}
+.env{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{font-size:11.5px;padding:4px 9px;border-radius:20px;border:1px solid var(--line2);
+  color:var(--dim);display:flex;align-items:center;gap:5px;white-space:nowrap}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.dot.bad{background:var(--err)}
+a.pill{text-decoration:none;color:var(--dim);transition:.15s}
+a.pill:hover{border-color:var(--acc);color:var(--acc)}
+
+/* ---------- steps ---------- */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;align-items:start}
+.grid .full{grid-column:1/-1}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;
+  transition:border-color .18s}
+.card:hover{border-color:var(--line2)}
+.card h2{font-size:13px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:14px}
+.num{width:20px;height:20px;border-radius:50%;background:var(--acc-dim);color:var(--acc);
+  font:600 11px/20px var(--mono);text-align:center;flex:none}
+.card h2 span.hint{font-weight:400;color:var(--dim2);font-size:11.5px;margin-left:auto}
+
+/* ---------- controls ---------- */
+.row{display:flex;gap:8px;align-items:center}
+.row+.row{margin-top:10px}
+input[type=text],select{
+  width:100%;background:#0d1015;border:1px solid var(--line2);border-radius:9px;
+  color:var(--txt);padding:9px 11px;font-size:12.5px;font-family:var(--mono);
+  transition:.15s;outline:none;min-width:0}
+input[type=text]:focus,select:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-dim)}
+input[type=text]::placeholder{color:var(--dim2);font-family:-apple-system,sans-serif}
+select{font-family:-apple-system,sans-serif;font-size:12.5px;cursor:pointer}
+.btn{
+  border:1px solid var(--line2);background:var(--panel2);color:var(--txt);
+  padding:9px 14px;border-radius:9px;font-size:12.5px;cursor:pointer;white-space:nowrap;
+  transition:.15s;font-family:inherit}
+.btn:hover{border-color:var(--acc);color:var(--acc);background:var(--acc-dim)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:linear-gradient(180deg,#e9b072,#cf8a3f);border-color:#d99a55;
+  color:#221609;font-weight:650}
+.btn.primary:hover{filter:brightness(1.07);color:#221609}
+.btn.primary:disabled{opacity:.4;cursor:not-allowed;filter:none}
+.btn.sm{padding:6px 10px;font-size:11.5px;border-radius:7px}
+.btn.ghost{background:transparent}
+.btn.danger{border-color:#7a3b34;background:#2a1a18;color:#f09086;font-weight:600}
+.btn.danger:hover{border-color:#e2685c;color:#ffb3a7;background:#3a201d}
+.btn.danger:disabled{opacity:.6;cursor:progress;transform:none;background:#2a1a18}
+.btn.acc{border-color:rgba(224,163,92,.55);background:rgba(224,163,92,.14);color:#f0b878;font-weight:600}
+.btn.acc:hover{border-color:#e0a35c;color:#ffd6a8;background:rgba(224,163,92,.22)}
+.btn.acc.on{background:rgba(224,163,92,.28);border-color:#e0a35c;color:#ffd6a8}
+.btn.primary:disabled:hover{filter:none}
+
+/* ---------- meta chips ---------- */
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.chip{font:11px/1 var(--mono);padding:5px 8px;border-radius:6px;background:#0f1319;
+  border:1px solid var(--line);color:var(--dim);letter-spacing:.2px}
+.chip b{color:var(--txt);font-weight:600}
+.chip.warn{border-color:rgba(224,163,92,.4);color:var(--acc);background:var(--acc-dim)}
+.chip.bad{border-color:rgba(226,104,92,.4);color:var(--err);background:rgba(226,104,92,.1)}
+.chip.good{border-color:rgba(92,191,139,.4);color:var(--ok);background:rgba(92,191,139,.1)}
+
+/* ---------- 体检 ---------- */
+.logbox{margin-top:12px;border:1px solid var(--line2);border-radius:10px;background:#0e1218;
+  padding:12px 14px;display:none}
+.logbox.on{display:block}
+.logbox .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.logbox .badge{font:600 11.5px/1 var(--mono);padding:5px 9px;border-radius:6px;
+  background:var(--acc-dim);color:var(--acc);border:1px solid rgba(224,163,92,.35)}
+.logbox .badge.key{background:rgba(92,191,139,.12);color:var(--ok);border-color:rgba(92,191,139,.35)}
+.logbox .badge.none{background:#1a1f26;color:var(--dim2);border-color:var(--line2)}
+.logbox .why{font-size:11.5px;color:var(--dim2);margin-top:7px;line-height:1.6}
+.logbox .act{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.logbox select{width:auto;flex:none;min-width:150px;padding:6px 9px;font-size:12px}
+
+/* ---------- tips ---------- */
+.tipbox{margin-top:12px;border:1px dashed var(--line2);border-radius:10px;padding:12px 14px;
+  background:#0e1218;font-size:12px;color:var(--dim);line-height:1.85}
+.tipbox b{color:var(--dim2);font-weight:600;display:block;margin-bottom:4px;font-size:11px;
+  letter-spacing:.4px;text-transform:uppercase}
+.tipbox em{color:var(--acc);font-style:normal}
+.warnbox{margin-top:10px;border-radius:9px;padding:9px 12px;font-size:11.5px;line-height:1.7;
+  border:1px solid rgba(224,163,92,.35);background:var(--acc-dim);color:#e8c49a;display:none}
+.warnbox.on{display:block}
+
+/* ---------- LUT list ---------- */
+.lutbox{margin-top:12px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0d1015}
+.luthead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);
+  background:#101419;font-size:11.5px;color:var(--dim2)}
+.lutlist{max-height:250px;overflow:auto;overscroll-behavior:contain}
+.lutrow{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid #171b21;
+  font-size:12px;cursor:default;transition:.1s}
+.lutrow:last-child{border-bottom:none}
+.lutrow:hover{background:#141920}
+.lutrow.sel1{background:rgba(224,163,92,.10)}
+.lutrow.sel2{background:rgba(90,140,220,.10)}
+.lutrow input[type=checkbox]{accent-color:var(--acc);width:13px;height:13px;flex:none;cursor:pointer}
+.luthead input[type=checkbox]{accent-color:var(--acc);width:13px;height:13px;flex:none;cursor:pointer}
+.selhint{margin-top:8px;font-size:10.5px;color:var(--dim2);line-height:1.6}
+.selhint b{color:var(--dim);font-weight:600}
+.lutlist.painting{cursor:cell;user-select:none}
+.lutrow.ckd{background:rgba(224,163,92,.06)}
+.lutname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:var(--mono);font-size:11.5px;color:#cfd6e0}
+.lutgroup{font-size:10px;color:var(--dim2);flex:none;max-width:110px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:9.5px;padding:2px 5px;border-radius:4px;flex:none;letter-spacing:.3px}
+.tag.convert{background:rgba(92,191,139,.14);color:var(--ok)}
+.tag.look{background:#1c2129;color:var(--dim2)}
+.star{width:18px;height:18px;flex:none;background:none;border:none;cursor:pointer;
+  color:#3a424e;font-size:13px;line-height:1;padding:0;transition:.12s}
+.star:hover{color:var(--acc)}
+.star.on{color:var(--acc)}
+.slotbtn{width:20px;height:20px;border-radius:5px;border:1px solid var(--line2);background:#0f1319;
+  color:var(--dim2);font:600 10px/1 var(--mono);cursor:pointer;flex:none;transition:.12s}
+.slotbtn:hover{color:var(--acc);border-color:var(--acc)}
+.slotbtn.on1{background:var(--acc);border-color:var(--acc);color:#221609}
+.slotbtn.on2{background:var(--blue);border-color:var(--blue);color:#06101f}
+.hidebtn{width:18px;height:18px;border-radius:5px;border:1px solid transparent;background:transparent;
+  color:#7b8493;font:400 11px/1 -apple-system,sans-serif;cursor:pointer;flex:none;
+  opacity:.5;transition:.12s;padding:0}
+.lutrow:hover .hidebtn{opacity:1}
+.hidebtn:hover{color:#f09086;border-color:#7a3b34;background:#2a1a18}
+.empty{padding:26px;text-align:center;color:var(--dim2);font-size:12px}
+
+/* ---------- 逐条体检清单 ---------- */
+.files{margin-top:12px;border-top:1px solid var(--line);padding-top:10px;display:none}
+.files.on{display:block}
+.files .hd{font-size:11px;color:var(--dim2);margin-bottom:6px;display:flex}
+.files .hd b{color:var(--dim);font-weight:600;margin-left:auto}
+.frow{display:flex;align-items:center;gap:8px;padding:6px 8px;
+  border-bottom:1px solid #171b21;font-size:11.5px;border-radius:5px}
+.frow:last-child{border-bottom:none}
+.frow:hover{background:#141920}
+.frow .fn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:var(--mono);color:#c3cbd6}
+.frow .fd{flex:none;font-family:var(--mono);color:var(--dim2);font-size:11px;white-space:nowrap}
+.flist{max-height:210px;overflow:auto;overscroll-behavior:contain}
+.fmore{padding:8px;text-align:center;font-size:11px;color:var(--dim2)}
+
+/* ---------- slots ---------- */
+.slot{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:9px;
+  border:1px dashed var(--line2);background:#0d1015;font-size:12px;margin-top:8px}
+.slot.filled{border-style:solid;border-color:rgba(224,163,92,.45);background:var(--acc-dim)}
+.slot .k{font:600 10px/1 var(--mono);color:var(--acc);flex:none;width:14px;text-align:center}
+.slot .v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:var(--mono);font-size:11.5px;color:#cfd6e0}
+.slot .v.ph{color:var(--dim2);font-family:-apple-system,sans-serif}
+.slot .x{color:var(--dim2);cursor:pointer;font-size:14px;line-height:1;padding:0 2px}
+.slot .x:hover{color:var(--err)}
+
+/* ---------- format cards ---------- */
+.fmts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+@media (max-width:1080px){.fmts{grid-template-columns:1fr 1fr}}
+.fmt{border:1px solid var(--line2);background:#0d1015;border-radius:10px;padding:11px 12px;
+  cursor:pointer;transition:.15s}
+.fmt:hover{border-color:#3b4450}
+.fmt.on{border-color:var(--acc);background:var(--acc-dim)}
+.fmt .t{font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px}
+.fmt .d{font-size:11px;color:var(--dim2);margin-top:3px;line-height:1.4}
+.fmt.on .t{color:var(--acc)}
+
+/* ---------- 画幅选择 ---------- */
+.subh{font-size:11px;color:var(--dim2);letter-spacing:.4px;text-transform:uppercase;
+  margin:16px 0 8px;display:flex;align-items:center;gap:8px}
+.subh:after{content:"";flex:1;height:1px;background:var(--line)}
+.picks{display:flex;gap:8px;flex-wrap:wrap}
+.pick{border:1px solid var(--line2);background:#0d1015;border-radius:9px;padding:8px 12px;
+  cursor:pointer;transition:.15s;font-size:12px;display:flex;flex-direction:column;gap:2px;min-width:104px}
+.pick:hover{border-color:#3b4450}
+.pick.on{border-color:var(--acc);background:var(--acc-dim)}
+.pick .t{font-weight:600;display:flex;align-items:center;gap:6px}
+.pick .d{font-size:10.5px;color:var(--dim2)}
+.pick.on .t{color:var(--acc)}
+.pick.on .d{color:#b89b7c}
+
+/* ---------- advanced ---------- */
+details.adv{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+details.adv summary{font-size:11.5px;color:var(--dim);cursor:pointer;list-style:none;user-select:none}
+details.adv summary::-webkit-details-marker{display:none}
+details.adv summary:before{content:"▸ ";color:var(--dim2)}
+details.adv[open] summary:before{content:"▾ "}
+.advbody{padding-top:14px;display:grid;gap:14px}
+.field{display:grid;gap:6px}
+.field label{font-size:11.5px;color:var(--dim);display:flex;align-items:center;gap:8px}
+.field label em{font-style:normal;color:var(--acc);font-family:var(--mono);font-size:11px;margin-left:auto}
+.field label i{font-style:normal;color:var(--dim2);font-size:10.5px}
+input[type=range]{width:100%;accent-color:var(--acc);height:4px;cursor:pointer}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:7px 0;border-radius:8px;border:1px solid var(--line2);background:#0d1015;
+  color:var(--dim);font-size:12px;cursor:pointer;transition:.13s;font-family:inherit}
+.seg button.on{background:var(--acc-dim);border-color:var(--acc);color:var(--acc);font-weight:600}
+.seg.two-thirds button{flex:none;padding:7px 14px}
+.sliders{display:grid;grid-template-columns:repeat(2,1fr);gap:12px 18px}
+@media (max-width:760px){.sliders{grid-template-columns:1fr}}
+.check{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);cursor:pointer}
+.check input{accent-color:var(--acc);width:14px;height:14px}
+
+/* ---------- action bar ---------- */
+.action{position:fixed;left:0;right:0;bottom:0;background:rgba(11,13,16,.92);
+  backdrop-filter:blur(14px);border-top:1px solid var(--line);z-index:20}
+.action-in{max-width:1360px;margin:0 auto;padding:12px 26px;display:flex;align-items:center;gap:14px}
+.sumbar{display:flex;gap:16px;font-size:12px;color:var(--dim);min-width:0;overflow:hidden}
+.sumbar b{color:var(--txt);font-family:var(--mono);font-weight:600}
+.sumbar .warn{color:var(--acc)}
+.action .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+/* ---------- progress ---------- */
+.prog{display:none;margin-top:16px}
+.prog.on{display:block}
+.prog .top{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.prog .pct{font:600 24px/1 var(--mono);color:var(--acc);letter-spacing:-1px}
+.prog .cur{flex:1;min-width:0;font-family:var(--mono);font-size:11.5px;color:var(--dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prog .stat{font:11px/1 var(--mono);color:var(--dim2);white-space:nowrap}
+.bar{height:7px;border-radius:4px;background:#1a1f26;overflow:hidden;position:relative}
+.bar .fill{height:100%;width:0;border-radius:4px;
+  background:linear-gradient(90deg,#b8752f,#e9b072);
+  box-shadow:0 0 12px rgba(224,163,92,.5);transition:width .35s ease}
+.bar .sub{position:absolute;inset:0;width:0;background:rgba(255,255,255,.22);transition:width .2s}
+
+/* ---------- log ---------- */
+.log{margin-top:12px;background:#080a0d;border:1px solid var(--line);border-radius:10px;
+  max-height:260px;overflow:auto;padding:10px 12px;font:11.5px/1.65 var(--mono);display:none}
+.log.on{display:block}
+.log div{color:#9aa4b2;white-space:pre-wrap;word-break:break-all}
+.log .ok{color:var(--ok)} .log .error{color:var(--err)}
+.log .warn{color:var(--acc)} .log .skip{color:var(--dim2)}
+.log i{color:#4c5563;font-style:normal;margin-right:8px}
+
+/* ---------- preview ---------- */
+.pv{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-top:14px}
+.pvc{background:#0d1015;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.pvc img{width:100%;display:block;aspect-ratio:16/9;object-fit:cover;background:#101419}
+.pvc .n{padding:6px 8px;font:11px/1.3 var(--mono);color:var(--dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pvc:hover{border-color:var(--acc)}
+
+.toast{position:fixed;left:50%;bottom:78px;transform:translate(-50%,12px);background:#1c2229;
+  border:1px solid var(--line2);color:var(--txt);padding:9px 16px;border-radius:9px;font-size:12.5px;
+  opacity:0;pointer-events:none;transition:.25s;z-index:40;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.toast.bad{border-color:rgba(226,104,92,.5);color:#ffb4ab}
+
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#2a3038;border-radius:5px;border:2px solid var(--panel)}
+::-webkit-scrollbar-thumb:hover{background:#3a424e}
+::-webkit-scrollbar-track{background:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logo">LUT</div>
+  <div>
+    <h1>LUT 批量导出器 <small id="ver">v1.2</small></h1>
+    <div class="sub">Apple Log 2 灰片 → 成片，一个文件夹一次走完</div>
+  </div>
+  <div class="env">
+    <div class="pill" id="envFfmpeg"><span class="dot" id="envDot"></span><span id="envTxt">检测环境…</span></div>
+    <div class="pill" id="envHw" style="display:none">⚡ 硬件编码</div>
+    <a class="pill" href="/help" target="_blank">📖 说明书</a>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- STEP 1 -->
+  <section class="card">
+    <h2><span class="num">1</span>素材文件夹<span class="hint" id="inHint"></span></h2>
+    <div class="row">
+      <input type="text" id="inDir" placeholder="点右边按钮选文件夹，或直接粘贴路径">
+      <button class="btn" onclick="pick('input','inDir')">选择</button>
+    </div>
+    <div class="row">
+      <button class="btn ghost sm" onclick="scanInput()">读取素材</button>
+      <button class="btn ghost sm" onclick="openDir(document.getElementById('inDir').value)">在访达中打开</button>
+    </div>
+    <div class="meta" id="inMeta"></div>
+
+    <div class="logbox" id="logBox">
+      <div class="top" id="logTop"></div>
+      <div class="why" id="logWhy"></div>
+      <div class="act">
+        <select id="logOverride" onchange="onLogOverride()">
+          <option value="auto">自动判断（按元数据 + 画面特征）</option>
+          <option value="apple_log_2">我拍的是 Apple Log 2（iPhone 17 Pro 起）</option>
+          <option value="apple_log">我拍的是 Apple Log（iPhone 15/16 Pro）</option>
+          <option value="rec709">已经转换过（直接叠风格 LUT）</option>
+        </select>
+        <button class="btn sm" onclick="autoMatch()">从我的库里挑转换 LUT</button>
+        <button class="btn sm acc" id="btnPure" onclick="applyPureRestore()">仅色彩还原</button>
+      </div>
+      <div class="why" id="pureHint" style="display:none"></div>
+    </div>
+    <div class="warnbox" id="preWarn"></div>
+
+    <div class="files" id="filesBox">
+      <div class="hd">逐条体检（名称 · 分辨率 · 时长 · 判定）<b id="filesNote"></b></div>
+      <div class="flist" id="filesList"></div>
+    </div>
+    <div class="tipbox" id="tipBox">
+      <b>想清楚三件事</b>
+      · 素材是 Blackmagic Camera 拍的 <em>.mov</em>（H.265 或 ProRes 都行）<br>
+      · 子文件夹会被完整保留，导出的目录结构和素材一一对应<br>
+      · 原片只读，永远不会被覆盖或修改
+    </div>
+  </section>
+
+  <!-- STEP 2 LUT -->
+  <section class="card">
+    <h2><span class="num">2</span>LUT 库<span class="hint" id="lutHint"></span></h2>
+    <div class="row">
+      <input type="text" id="lutDir" placeholder="放 .cube 文件的文件夹（可含子文件夹）">
+      <button class="btn" onclick="pick('lut','lutDir')">选择</button>
+    </div>
+    <div class="row">
+      <input type="text" id="lutFilter" placeholder="搜索 LUT 名称…">
+      <button class="btn ghost sm" id="favToggle" onclick="toggleFavOnly()">★ 只看收藏</button>
+      <button class="btn ghost sm" onclick="scanLut()">刷新</button>
+    </div>
+
+    <div class="slot" id="slot1"><span class="k">①</span><span class="v ph">转换 LUT（Apple Log 2 → Rec.709），点列表里的 ① 填入</span><span class="x" onclick="clearSlot(1)">×</span></div>
+    <div class="slot" id="slot2"><span class="k">②</span><span class="v ph">风格 LUT（叠在上面），点列表里的 ② 填入</span><span class="x" onclick="clearSlot(2)">×</span></div>
+
+    <div class="lutbox">
+      <div class="luthead">
+        <input type="checkbox" id="lutAll" title="全选 / 全不选当前列表" onchange="toggleAllVisible()">
+        <span id="lutCount">尚未加载 LUT</span>
+        <span id="lutHidden" onclick="restoreAllHidden()" title="点一下把收起来的 LUT 全部放回来"
+              style="display:none;margin-left:8px;cursor:pointer;font-size:10.5px;color:#e0a35c;border-bottom:1px dashed rgba(224,163,92,.5)">已隐藏 0 · 恢复</span>
+        <span style="margin-left:auto;cursor:pointer" id="pvSel" onclick="uncheckAll()" title="点一下清空勾选">试色已选 0</span>
+      </div>
+      <div class="lutlist" id="lutList"><div class="empty">先选择 LUT 文件夹</div></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn ghost sm" onclick="checkFiltered()">全选筛选结果</button>
+      <button class="btn ghost sm" onclick="invertFiltered()">反选</button>
+      <button class="btn ghost sm" onclick="uncheckAll()">清空勾选</button>
+      <button class="btn ghost sm" onclick="showRecent()">最近用过</button>
+    </div>
+    <div class="selhint">勾选方式：单击勾 / 按住 <b>Shift</b> 点击选一整段 / 按住鼠标<b>拖过</b>复选框可连续刷选 / 表头方框全选</div>
+    <div class="warnbox" id="convWarn"></div>
+  </section>
+
+  <!-- STEP 3 OUTPUT -->
+  <section class="card full">
+    <h2><span class="num">3</span>输出设置<span class="hint">决定画质、画幅和体积</span></h2>
+    <div class="fmts" id="fmts"></div>
+
+    <div class="subh">画幅（可多选，素材只解码一遍，同时出多个版本）</div>
+    <div class="picks" id="aspects"></div>
+
+    <div class="row" style="margin-top:14px">
+      <input type="text" id="outDir" placeholder="导出到哪个文件夹（不存在会自动建）">
+      <button class="btn" onclick="pick('output','outDir')">选择</button>
+    </div>
+    <div class="meta" id="outMeta"></div>
+
+    <details class="adv">
+      <summary>高级参数</summary>
+      <div class="advbody">
+        <div class="field">
+          <label>编码质量 <em id="qLabel">标准 · 40 Mbps</em></label>
+          <div class="seg" id="qSeg">
+            <button data-q="high">高</button><button data-q="normal" class="on">标准</button><button data-q="small">小</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>音频处理 <em id="aLabel">保持原样</em></label>
+          <div class="seg" id="aSeg"></div>
+        </div>
+        <div class="field">
+          <label>LUT 强度 <em id="iLabel">100%</em></label>
+          <input type="range" id="intensity" min="0" max="100" value="100" step="5">
+        </div>
+        <div class="field">
+          <label>输入色域矩阵 <em id="mLabel">自动</em></label>
+          <div class="seg" id="mSeg">
+            <button data-m="auto" class="on">自动</button>
+            <button data-m="bt2020nc">BT.2020</button>
+            <button data-m="bt709">BT.709</button>
+          </div>
+        </div>
+
+        <div class="subh" style="margin:4px 0 0">画面微调（在 LUT 之后生效，统一整批素材）</div>
+        <div class="sliders">
+          <div class="field">
+            <label>曝光 <em id="evLabel">0.00 EV</em></label>
+            <input type="range" id="gExposure" min="-150" max="150" value="0" step="5">
+          </div>
+          <div class="field">
+            <label>对比度 <em id="gcLabel">1.00</em></label>
+            <input type="range" id="gContrast" min="70" max="140" value="100" step="2">
+          </div>
+          <div class="field">
+            <label>饱和度 <em id="gsLabel">1.00</em></label>
+            <input type="range" id="gSaturation" min="40" max="180" value="100" step="2">
+          </div>
+          <div class="field">
+            <label>色温 <i>冷 ← → 暖</i> <em id="gtLabel">0</em></label>
+            <input type="range" id="gTemp" min="-100" max="100" value="0" step="5">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>文件名后缀</label>
+          <input type="text" id="suffix" value="_LUT" placeholder="可留空">
+        </div>
+        <label class="check"><input type="checkbox" id="skipExist" checked> 跳过已存在的输出文件（可断点续跑）</label>
+      </div>
+    </details>
+  </section>
+
+  <!-- LOG -->
+  <section class="card full">
+    <h2><span class="num">4</span>运行<span class="hint" id="runHint">就绪</span></h2>
+    <div class="prog on" id="prog">
+      <div class="top">
+        <div class="pct" id="pct">0%</div>
+        <div class="cur" id="cur">还没开始 —— 上面三步选好，点右下角「开始批量导出」</div>
+        <div class="stat" id="stat"></div>
+      </div>
+      <div class="bar"><div class="sub" id="barSub"></div><div class="fill" id="barFill"></div></div>
+    </div>
+    <div class="log on" id="log"><div style="color:#4c5563">日志会在这里逐条滚动显示…</div></div>
+    <div class="meta" id="runMeta"></div>
+  </section>
+
+  <!-- PREVIEW -->
+  <section class="card full">
+    <h2><span class="num">✦</span>试色板<span class="hint">先用一帧看效果，再批量跑</span></h2>
+    <div class="row">
+      <input type="text" id="pvFile" placeholder="抽帧用的那条素材路径（点「用第一条素材」自动填）">
+      <button class="btn ghost sm" onclick="useFirst()">用第一条素材</button>
+      <button class="btn" onclick="runPreview()">生成试色板</button>
+    </div>
+    <div class="meta" id="pvMeta"></div>
+    <div class="pv" id="pvGrid"></div>
+  </section>
+
+</div>
+</div>
+
+<div class="action">
+  <div class="action-in">
+    <div class="sumbar">
+      <span>素材 <b id="sumFiles">0</b> 条</span>
+      <span>输出 <b id="sumTasks">0</b> 个文件</span>
+      <span>预计 <b id="sumSize">—</b></span>
+      <span id="sumLut" class="warn"></span>
+    </div>
+    <div class="right">
+      <button class="btn danger" id="btnStop" style="display:none" onclick="stopJob()">停止</button>
+      <button class="btn primary" id="btnStart" onclick="startJob()">开始批量导出</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const S = {
+  env:null, files:[], sample:{}, luts:[], slots:{1:null,2:null},
+  fmt:'hevc', quality:'normal', matrix:'auto', checked:new Set(), polling:null,
+  aspects:new Set(['source']), audioMode:'keep', fav:new Set(), recent:[],
+  favOnly:false, logInfo:null, logOverride:'auto', filterRecent:false,
+  builtin:[], hidden:new Set(),
+  // 勾选交互：anchor = Shift 范围选择的锚点；paint* = 鼠标拖动刷选
+  anchor:null, painting:false, paintOn:true, paintTouched:null,
+  grade:{exposure:0, contrast:1, saturation:1, temperature:0}
+};
+
+/* ---------------- 基础 ---------------- */
+function $(id){return document.getElementById(id)}
+function toast(msg, bad){
+  const t=$('toast'); t.textContent=msg; t.className='toast on'+(bad?' bad':'');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.className='toast',2400);
+}
+async function api(path, body){
+  const r = await fetch(path, body?{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify(body)}:{method:'GET'});
+  let d={}; try{ d=await r.json() }catch(e){}
+  if(!r.ok || d.error){ throw new Error(d.error||('请求失败 '+r.status)) }
+  return d;
+}
+function human(n){
+  if(!n) return '0 B';
+  const u=['B','KB','MB','GB','TB']; let i=0;
+  while(n>=1024&&i<u.length-1){n/=1024;i++}
+  return n.toFixed(n<10?1:0)+' '+u[i];
+}
+function fmtDur(s){
+  s=Math.max(0,Math.round(s)); const m=Math.floor(s/60), ss=s%60;
+  if(m>59){const h=Math.floor(m/60); return h+':' + String(m%60).padStart(2,'0') + ':' + String(ss).padStart(2,'0')}
+  return m+':'+String(ss).padStart(2,'0');
+}
+function baseName(p){ return (p||'').split('/').pop().replace(/\.cube$/i,'') }
+
+/* ---------------- 环境 ---------------- */
+async function boot(){
+  try{
+    const e = await api('/api/env');
+    S.env=e;
+    S.builtin = e.builtin_luts||[];
+    $('ver').textContent='v'+e.version;
+    $('envTxt').textContent = e.ffmpeg_ok ? ('ffmpeg '+e.ffmpeg_version) : '未找到 ffmpeg';
+    $('envDot').className = 'dot'+(e.ffmpeg_ok?'':' bad');
+    if(!e.ffmpeg_ok){
+      toast('未检测到 ffmpeg，请先按说明书安装', true);
+      $('envTxt').parentElement.style.borderColor='rgba(226,104,92,.5)';
+    }
+    if(e.hevc_vt){ $('envHw').style.display='flex' }
+    renderFmts(e.formats);
+    renderAspects(e.aspects);
+    renderAudio(e.audio_modes);
+
+    // 收藏
+    try{ const f=await api('/api/lutfav'); S.fav=new Set(f.favorites||[]); S.recent=f.recent||[] }catch(e){}
+    // 已从列表移除的 LUT
+    try{ const h=await api('/api/luthide'); S.hidden=new Set(h.hidden||[]) }catch(e){}
+
+    // 恢复上次设置
+    const cfg = await api('/api/config');
+    if(cfg.input_dir){ $('inDir').value=cfg.input_dir }
+    if(cfg.output_dir){ $('outDir').value=cfg.output_dir }
+    if(cfg.lut_dir){ $('lutDir').value=cfg.lut_dir }
+    if(cfg.suffix!==undefined){ $('suffix').value=cfg.suffix }
+    if(cfg.skip_existing!==undefined){ $('skipExist').checked=cfg.skip_existing }
+    if(cfg.format){ setFmt(cfg.format) }
+    if(cfg.quality){ setQuality(cfg.quality) }
+    if(cfg.matrix){ setMatrix(cfg.matrix) }
+    if(cfg.audio_mode){ setAudio(cfg.audio_mode) }
+    if(Array.isArray(cfg.aspects) && cfg.aspects.length){
+      S.aspects=new Set(cfg.aspects); renderAspects(e.aspects)
+    }
+    if(cfg.grade){
+      S.grade=Object.assign({exposure:0,contrast:1,saturation:1,temperature:0}, cfg.grade);
+      $('gExposure').value=Math.round(S.grade.exposure*100);
+      $('gContrast').value=Math.round(S.grade.contrast*100);
+      $('gSaturation').value=Math.round(S.grade.saturation*100);
+      $('gTemp').value=Math.round(S.grade.temperature);
+      refreshGradeLabels();
+    }
+    if(cfg.intensity){ $('intensity').value=Math.round(cfg.intensity*100); $('iLabel').textContent=Math.round(cfg.intensity*100)+'%' }
+    if(cfg.log_override){ S.logOverride=cfg.log_override; $('logOverride').value=cfg.log_override }
+    if(cfg.input_dir) scanInput(true);
+    if(cfg.lut_dir){ await scanLut(true); if(cfg.luts) cfg.luts.forEach((p,i)=>{ if(p) setSlot(i+1,p,true) }) }
+  }catch(err){ toast(err.message,true) }
+}
+
+/* ---------------- 选文件夹 ---------------- */
+async function pick(kind, target){
+  // 原生 app 内运行时，直接调系统文件夹面板（最稳）
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickFolder){
+    window.__nativePickTarget = target;
+    window.webkit.messageHandlers.pickFolder.postMessage(kind);
+    return;
+  }
+  try{
+    const r = await api('/api/dialog',{kind});
+    if(r.canceled||!r.path){ return }
+    $(target).value = r.path;
+    if(target==='inDir') scanInput();
+    if(target==='lutDir') scanLut();
+  }catch(e){ toast('打开选择框失败，可直接粘贴路径', true) }
+}
+async function openDir(d){ if(!d) return; try{ await api('/api/open',{dir:d}) }catch(e){} }
+
+// 原生面板选完之后由 Swift 调回来
+window.__nativePickResult = function(kind, path){
+  const target = window.__nativePickTarget;
+  if(!path || !target){ return }
+  $(target).value = path;
+  if(target==='inDir') scanInput();
+  else if(target==='lutDir') scanLut();
+  else if(target==='outDir') setFmt(S.fmt);
+};
+
+/* ---------------- 扫描素材 + 体检 ---------------- */
+async function scanInput(silent){
+  const dir = $('inDir').value.trim();
+  if(!dir) return;
+  $('inHint').textContent='读取并体检中…';
+  try{
+    const r = await api('/api/scan_input',{dir});
+    S.files = r.files; S.sample = r.sample||{};
+    $('inHint').textContent='';
+    const s=S.sample, m=$('inMeta');
+    if(!r.count){
+      m.innerHTML='<span class="chip bad">这个文件夹里没有视频文件</span>';
+      $('filesBox').classList.remove('on');
+      $('logBox').classList.remove('on');
+      $('sumFiles').textContent='0'; updateSum(); return;
+    }
+    $('sumFiles').textContent=r.count;
+    const chips=[];
+    chips.push(`<span class="chip"><b>${r.count}</b> 条 · <b>${human(r.total_size)}</b></span>`);
+    if(s.codec) chips.push(`<span class="chip"><b>${codecName(s.codec)}</b> ${s.profile||''}</span>`);
+    if(s.width) chips.push(`<span class="chip"><b>${s.width}×${s.height}</b></span>`);
+    if(s.fps) chips.push(`<span class="chip"><b>${s.fps}</b> fps</span>`);
+    if(s.bit_depth) chips.push(`<span class="chip">${s.pix_fmt} · ${s.bit_depth}bit</span>`);
+    if(s.duration) chips.push(`<span class="chip">${fmtDur(s.duration)}</span>`);
+    const known = v => v && v!=='unknown' && v!=='reserved';
+    if(known(s.color_primaries)) chips.push(`<span class="chip">${s.color_primaries}${known(s.color_transfer)?' / '+s.color_transfer:''}</span>`);
+    if(s.audio) chips.push(`<span class="chip">音频 ${s.audio} ${s.audio_channels||''}ch</span>`);
+    m.innerHTML = chips.join('');
+
+    renderLogBox(r.log);
+    renderPreWarn(r.precheck, r.count);
+
+    $('pvFile').value = (r.files[0]||{}).path||'';
+    const fb=$('filesBox');
+    fb.classList.add('on');
+    $('tipBox').style.display='none';
+    renderFileList(r.files, r.count);
+    $('filesNote').textContent = r.count+' 条';
+    updateSum();
+    if(!silent) toast('找到 '+r.count+' 条素材');
+  }catch(e){ $('inHint').textContent=''; toast(e.message,true) }
+}
+
+function logBadge(t){
+  if(['apple_log_2','apple_log','log_other','hlg','pq'].includes(t)) return ['log','Log 灰片'];
+  if(t==='rec709') return ['rec','已转换'];
+  if(t==='mixed') return ['mid','待确认'];
+  return ['mid','未判定'];
+}
+function verdictChip(cls, text){
+  const skin = cls==='log' ? 'background:rgba(224,163,92,.16);color:#f0b878;border:1px solid rgba(224,163,92,.35)'
+             : cls==='rec' ? 'background:rgba(92,191,139,.16);color:#7fd6a8;border:1px solid rgba(92,191,139,.32)'
+             : cls==='d8'  ? 'background:rgba(226,104,92,.14);color:#f09086;border:1px solid rgba(226,104,92,.3)'
+             :              'background:#1c2129;color:#8d97a6;border:1px solid #2f3742';
+  return `<span style="flex:none;font-size:9.5px;padding:2px 6px;border-radius:4px;white-space:nowrap;${skin}">${text}</span>`;
+}
+function renderFileList(files, count){
+  const rows = files.slice(0,60).map(f=>{
+    const info=f.info||{};
+    const dur = info.duration? fmtDur(info.duration) : '—';
+    const dim = info.width? `${info.width}×${info.height}` : '—';
+    const [cls,txt] = logBadge(f.log_type);
+    const d8 = f.bit_depth && f.bit_depth<=8;
+    const cells = [`<span class="fn">${esc(f.name)}</span>`,
+                   `<span class="fd">${dim}</span>`,
+                   `<span class="fd">${dur}</span>`];
+    if (d8) cells.push(verdictChip('d8','8bit'));
+    cells.push(verdictChip(cls, txt));
+    return `<div class="frow" title="${esc(f.rel)}">${cells.join('')}</div>`;
+  }).join('');
+  $('filesList').innerHTML = rows +
+    (count>60? `<div class="fmore">还有 ${count-60} 条未列出（都会处理）</div>`:'');
+}
+
+function renderLogBox(log){
+  const box=$('logBox'), top=$('logTop'), why=$('logWhy');
+  if(!log || !log.type){ box.classList.remove('on'); S.logInfo=null; return }
+  S.logInfo = log;
+  const eff = effectiveLogType();
+  const cls = log.confidence==='key'?'key':(log.confidence==='none'?'none':'');
+  const confTxt = {key:'元数据确认', metadata:'元数据推断', inferred:'画面特征推断', none:'无依据'}[log.confidence] || '';
+  let html = `<span class="badge ${cls}">${esc(log.label)}</span>`;
+  html += `<span class="chip">${confTxt}</span>`;
+  if(log.counts){
+    const parts=Object.entries(log.counts).filter(([k,v])=>v>0).map(([k,v])=>`${esc(k)} ${v}`);
+    html += `<span class="chip">${parts.join(' · ')}</span>`;
+  }
+  top.innerHTML = html;
+  why.textContent = log.reason || '';
+  box.classList.add('on');
+  $('logOverride').value = S.logOverride;
+  // 自动挑一次转换 LUT
+  if(eff && ['apple_log_2','apple_log','log_other','hlg','pq'].includes(eff) && !S.slots[1] && S.luts.length){
+    autoMatch(true);
+  }
+  syncPureBtn();
+  checkConvWarn();
+}
+function effectiveLogType(){
+  if(S.logOverride && S.logOverride!=='auto') return S.logOverride;
+  return S.logInfo ? S.logInfo.type : null;
+}
+function onLogOverride(){
+  S.logOverride = $('logOverride').value;
+  const wasBuiltin = !!(S.slots[1] && (S.builtin||[]).some(b=>b.path===S.slots[1]));
+  S.slots[1] = null; clearSlot(1);
+  if(S.logOverride==='auto'){ renderLogBox(S.logInfo) }
+  else if(wasBuiltin){
+    applyPureRestore();          // 保持「仅还原」状态，换成对应那一版内置曲线
+  }
+  else {
+    autoMatch();
+    if(S.logOverride==='rec709'){
+      toast('已切到「已转换」：不会再加转换 LUT，只叠风格 LUT');
+    }
+  }
+}
+function renderPreWarn(pc, count){
+  const box=$('preWarn');
+  if(!pc) { box.classList.remove('on'); return }
+  const msgs=[];
+  if(pc.counts && pc.counts.warn) msgs.push(`有 ${pc.counts.warn} 条素材需要注意：${(pc.warnings||[]).join('；')}`);
+  if(pc.counts && pc.counts.reject) msgs.push(`有 ${pc.counts.reject} 条完全读不了，会直接跳过`);
+  if(!msgs.length){ box.classList.remove('on'); return }
+  box.innerHTML = msgs.map(esc).join('<br>');
+  box.classList.add('on');
+}
+
+/* ---------------- LUT 匹配 ---------------- */
+function pickConvertLut(logType){
+  if(!S.luts.length) return null;
+  const scoreOf = (l)=>{
+    const n=(l.name||'').toLowerCase().replace(/\s+/g,'');
+    let sc=0;
+    if(logType==='apple_log_2'){
+      if(/applelog2|log2|log_2|log-2/.test(n)) sc+=12;
+      else if(/applelog/.test(n)) sc+=4;
+    } else if(logType==='apple_log'){
+      if(/applelog|log/.test(n)) sc+=8;
+      if(/log2/.test(n)) sc-=6;
+    } else if(logType==='hlg'||logType==='pq'){
+      if(/hlg|hdr|pq|2084|2020/.test(n)) sc+=10;
+    } else {
+      if(/log/.test(n)) sc+=6;
+    }
+    if(/torec709|to709|rec709|rec\.709|conversion|convert|transform|cst|torec/.test(n)) sc+=5;
+    if(/technical|input/.test(n)) sc+=2;
+    if(l.guess==='convert') sc+=2;
+    if(S.fav.has(l.path)) sc+=1;
+    return sc;
+  };
+  let best=null, bs=0;
+  for(const l of S.luts){ const sc=scoreOf(l); if(sc>bs){ best=l; bs=sc } }
+  return bs>=4 ? best : null;
+}
+function autoMatch(quiet){
+  const t = effectiveLogType();
+  if(!t){ if(!quiet) toast('还没识别出素材的 Log 类型', true); return }
+  if(t==='rec709'){ if(!quiet) toast('素材已是 Rec.709，不需要转换 LUT'); return }
+  const l = pickConvertLut(t);
+  if(!l){ if(!quiet) toast('LUT 库里没找到匹配的转换 LUT，请手动选', true); return }
+  setSlot(1, l.path);
+  if(!quiet) toast('已匹配：'+l.name);
+}
+
+/* ---- 内置还原：不依赖任何 .cube 文件，按 Apple 公开曲线现场算出来的转换 ---- */
+function pickBuiltin(logType){
+  const list = S.builtin||[];
+  if(!list.length) return null;
+  const want = (logType==='apple_log') ? 'apple_log' : 'apple_log_2';
+  return list.find(b=>b.key===want) || list[0];
+}
+function syncPureBtn(){
+  const btn=$('btnPure'), h=$('pureHint');
+  if(!btn) return;
+  const p = S.slots[1];
+  const b = p ? (S.builtin||[]).find(x=>x.path===p) : null;
+  btn.classList.toggle('on', !!b);
+  btn.textContent = b ? '✓ 仅色彩还原' : '仅色彩还原';
+  if(!h) return;
+  if(!b){ h.style.display='none'; return }
+  h.style.display='block';
+  h.innerHTML = `正在用内置曲线还原：<b>${esc(b.label)}</b>（${esc(b.desc)}）。`+
+    (S.slots[2]
+      ? `② 槽还挂着风格 LUT —— 那就不是「仅」还原了，是「还原 + 风格」。`
+      : `② 槽是空的，输出的是颜色正常的普通画面，不叠加任何风格。`);
+}
+function applyPureRestore(){
+  const t = effectiveLogType();
+  if(!t){
+    toast('还没识别出素材的 Log 类型，先在上面下拉里选一个', true);
+    return;
+  }
+  if(t==='rec709'){
+    toast('这批素材已经是 Rec.709，不需要还原', true);
+    return;
+  }
+  const bl = pickBuiltin(t);
+  if(!bl){
+    toast('内置还原曲线缺失，重跑 开发/make_builtin_luts.py 就能生成', true);
+    return;
+  }
+  const hadStyle = !!S.slots[2];
+  setSlot(1, bl.path);
+  if(hadStyle) clearSlot(2);
+  syncPureBtn();
+  toast(hadStyle ? '仅色彩还原：风格 LUT 已清空，只还原灰片'
+                 : '仅色彩还原已启用，不套任何风格 LUT');
+  checkConvWarn(); updateSum();
+}
+
+/* ---------------- 扫描 LUT ---------------- */
+async function scanLut(silent){
+  const dir=$('lutDir').value.trim(); if(!dir) return;
+  $('lutHint').textContent='读取中…';
+  try{
+    const r=await api('/api/scan_lut',{dir});
+    S.luts=r.luts; $('lutHint').textContent='';
+    renderLuts(); checkConvWarn();
+    if(!silent) toast('找到 '+r.count+' 个 LUT');
+  }catch(e){ $('lutHint').textContent=''; toast(e.message,true) }
+}
+function visibleLuts(){
+  const kw=$('lutFilter').value.trim().toLowerCase();
+  let list = S.luts.filter(l=>!kw || l.name.toLowerCase().includes(kw) || (l.group||'').toLowerCase().includes(kw));
+  // 收起来的 LUT 不显示；列表顶部有「已隐藏 N 个」入口可以随时恢复
+  list = list.filter(l=>!S.hidden.has(l.path));
+  if(S.favOnly) list = list.filter(l=>S.fav.has(l.path));
+  if(S.filterRecent) list = list.filter(l=>S.recent.includes(l.path));
+  return list;
+}
+function renderLuts(){
+  const list = visibleLuts();
+  const total = S.luts.length;
+  const hidN = S.hidden.size;
+  const parts=[];
+  parts.push(total ? (list.length===total? `${total} 个 LUT` : `显示 ${list.length} / ${total}`) : '尚未加载 LUT');
+  if(S.favOnly) parts.push('★ 只看收藏');
+  if(S.filterRecent) parts.push('最近用过');
+  $('lutCount').textContent = parts.join(' · ');
+  const hb = $('lutHidden');
+  if(hb){
+    if(hidN){ hb.style.display='inline-block'; hb.textContent = `已隐藏 ${hidN} · 恢复` }
+    else hb.style.display='none';
+  }
+  const box=$('lutList');
+  if(!list.length){
+    box.innerHTML = total
+      ? `<div class="empty">${hidN?'都被收起来了，点上面的「已隐藏 '+hidN+' · 恢复」': '没有匹配的 LUT'}</div>`
+      : '<div class="empty">先选择 LUT 文件夹</div>';
+    return;
+  }
+  const show=list.slice(0,300);
+  box.innerHTML = show.map((l)=>{
+    const is1=S.slots[1]===l.path, is2=S.slots[2]===l.path;
+    const starred=S.fav.has(l.path);
+    const ck=S.checked.has(l.path);
+    return `<div class="lutrow ${is1?'sel1':''} ${is2?'sel2':''} ${ck?'ckd':''}">
+      <input type="checkbox" data-p="${encodeURIComponent(l.path)}" ${ck?'checked':''}>
+      <button class="star ${starred?'on':''}" data-fav="${encodeURIComponent(l.path)}" title="收藏">${starred?'★':'☆'}</button>
+      <span class="tag ${l.guess}">${l.guess==='convert'?'转换':'风格'}</span>
+      <span class="lutname" title="${esc(l.rel)}">${esc(l.name)}</span>
+      ${l.group && l.group!=='.' ? `<span class="lutgroup">${esc(l.group)}</span>`:''}
+      <button class="slotbtn ${is1?'on1':''}" title="设为转换 LUT" data-slot="1" data-p="${encodeURIComponent(l.path)}">①</button>
+      <button class="slotbtn ${is2?'on2':''}" title="叠在上面" data-slot="2" data-p="${encodeURIComponent(l.path)}">②</button>
+      <button class="hidebtn" title="从列表移除（文件不动，可恢复）" data-hide="${encodeURIComponent(l.path)}">✕</button>
+    </div>`;
+  }).join('') + (list.length>300?`<div class="empty">还有 ${list.length-300} 个未显示，用搜索缩小范围</div>`:'');
+  syncSelUI();
+
+  box.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.onchange=()=>{
+      const p=decodeURIComponent(cb.dataset.p);
+      cb.checked?S.checked.add(p):S.checked.delete(p);
+      syncSelUI();
+    };
+  });
+  // Shift 点击：从上次勾选位置到当前位置整段选中
+  box.querySelectorAll('.lutrow').forEach((row)=>{
+    row.onmousedown=(e)=>{
+      const cb=row.querySelector('input[type=checkbox]');
+      if(!cb) return;
+      const p=decodeURIComponent(cb.dataset.p);
+      const idx=list.findIndex(l=>l.path===p);
+      if(e.shiftKey && S.anchor!=null && idx>=0){
+        e.preventDefault();
+        const [a,b]=[Math.min(S.anchor,idx),Math.max(S.anchor,idx)];
+        for(let i=a;i<=b;i++) S.checked.add(list[i].path);
+        syncSelUI(); renderChecks();
+        return;
+      }
+      // 拖动刷选：从这一行按下开始，鼠标拖到哪勾到哪
+      if(e.button!==0) return;
+      S.anchor=idx;
+      S.paintOn=!cb.checked;               // 本次刷选的目标状态
+      S.painting=true;
+      S.paintTouched=new Set();
+      S.paintTouched.add(p);
+      S.paintOn?S.checked.add(p):S.checked.delete(p);
+      $('lutList').classList.add('painting');
+      cb.checked=S.paintOn;
+      syncSelUI();
+      e.preventDefault();                   // 否则系统会抢走原生 checkbox 切换
+    };
+    row.onmouseenter=()=>{
+      if(!S.painting) return;
+      const cb=row.querySelector('input[type=checkbox]');
+      if(!cb) return;
+      const p=decodeURIComponent(cb.dataset.p);
+      if(S.paintTouched.has(p)) return;
+      S.paintTouched.add(p);
+      S.paintOn?S.checked.add(p):S.checked.delete(p);
+      cb.checked=S.paintOn;
+      syncSelUI();
+    };
+  });
+  box.querySelectorAll('.slotbtn').forEach(b=>{
+    b.onclick=()=>setSlot(+b.dataset.slot, decodeURIComponent(b.dataset.p));
+  });
+  box.querySelectorAll('.hidebtn').forEach(b=>{
+    b.onclick=()=>toggleHideLut(decodeURIComponent(b.dataset.hide));
+  });
+  box.querySelectorAll('.star').forEach(b=>{
+    b.onclick=async()=>{
+      const p=decodeURIComponent(b.dataset.fav);
+      try{
+        const f=await api('/api/lutfav',{path:p});
+        S.fav=new Set(f.favorites||[]); S.recent=f.recent||[];
+        renderLuts();
+      }catch(e){ toast(e.message,true) }
+    };
+  });
+}
+
+/* ---- 从列表里移除某个 LUT（只影响列表，不动磁盘文件）---- */
+async function toggleHideLut(path, silent){
+  // 如果它正挂在槽里，先把槽清掉，免得看不见却还在生效
+  for(const n of [1,2]){
+    if(S.slots[n]===path){
+      S.slots[n]=null;
+      clearSlot(n);
+    }
+  }
+  try{
+    const r = await api('/api/luthide', {path});
+    S.hidden = new Set(r.hidden||[]);
+    renderLuts();
+    if(!silent){
+      const isHid = S.hidden.has(path);
+      toast(isHid ? '已从列表移除（文件还在，可恢复）' : '已恢复显示',
+            false);
+    }
+  }catch(e){ toast(e.message, true) }
+}
+async function restoreAllHidden(){
+  if(!S.hidden.size) return;
+  try{
+    const r = await api('/api/luthide', {path:'', all:'restore'});
+    S.hidden = new Set(r.hidden||[]);
+    renderLuts();
+    toast('已恢复全部 LUT');
+  }catch(e){ toast(e.message, true) }
+}
+function toggleFavOnly(){
+  S.favOnly=!S.favOnly; S.filterRecent=false;
+  $('favToggle').classList.toggle('on', S.favOnly);
+  $('favToggle').style.color = S.favOnly? 'var(--acc)':'';
+  renderLuts();
+}
+function showRecent(){
+  if(!S.recent.length){ toast('还没用过任何 LUT', true); return }
+  S.filterRecent=true; S.favOnly=false;
+  $('favToggle').style.color='';
+  renderLuts(); toast('最近用过 '+S.recent.length+' 个');
+}
+function checkFiltered(){
+  const list=visibleLuts();
+  if(!list.length) return toast('当前筛选结果是空的', true);
+  list.forEach(l=>S.checked.add(l.path));
+  S.anchor=null; syncSelUI(); renderChecks();
+  toast('已勾选 '+list.length+' 个');
+}
+function invertFiltered(){
+  const list=visibleLuts();
+  if(!list.length) return toast('当前筛选结果是空的', true);
+  list.forEach(l=>{ S.checked.has(l.path)?S.checked.delete(l.path):S.checked.add(l.path) });
+  S.anchor=null; syncSelUI(); renderChecks();
+  toast('已反选，当前勾选 '+S.checked.size+' 个');
+}
+function toggleAllVisible(){
+  const list=visibleLuts();
+  if(!list.length){ $('lutAll').checked=false; return }
+  const allOn=list.every(l=>S.checked.has(l.path));
+  list.forEach(l=>{ allOn?S.checked.delete(l.path):S.checked.add(l.path) });
+  S.anchor=null; syncSelUI(); renderChecks();
+}
+function uncheckAll(){ S.checked.clear(); S.anchor=null; syncSelUI(); renderChecks() }
+function syncSelUI(){
+  $('pvSel').textContent='试色已选 '+S.checked.size;
+  const list=visibleLuts();
+  const m=$('lutAll');
+  if(m){
+    const on=list.filter(l=>S.checked.has(l.path)).length;
+    m.checked = list.length>0 && on===list.length;
+    m.indeterminate = on>0 && on<list.length;
+  }
+}
+function renderChecks(){
+  const box=$('lutList');
+  box.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.checked=S.checked.has(decodeURIComponent(cb.dataset.p));
+  });
+  box.querySelectorAll('.lutrow').forEach(row=>{
+    const cb=row.querySelector('input[type=checkbox]');
+    row.classList.toggle('ckd', !!(cb&&cb.checked));
+  });
+}
+document.addEventListener('mouseup',()=>{
+  if(!S.painting) return;
+  S.painting=false;
+  if(S.paintTouched && S.paintTouched.size>1){
+    toast(S.paintOn?('刷选勾上 '+S.paintTouched.size+' 个'):('刷选取消 '+S.paintTouched.size+' 个'));
+  }
+  S.paintTouched=null;
+  const l=$('lutList'); if(l) l.classList.remove('painting');
+  renderChecks();
+});
+
+function setSlot(n,path,noRender){
+  if(!path) return;
+  S.slots[n]=path;
+  const el=$('slot'+n);
+  el.classList.add('filled');
+  const v=el.querySelector('.v');
+  const b = (S.builtin||[]).find(x=>x.path===path);
+  v.textContent = b ? b.short : baseName(path);
+  v.style.color = b ? '#f0b878' : '';
+  v.classList.remove('ph');
+  if(!noRender) renderLuts();
+  syncPureBtn(); updateSum();
+}
+function clearSlot(n){
+  S.slots[n]=null;
+  const el=$('slot'+n);
+  el.classList.remove('filled');
+  const v=el.querySelector('.v');
+  v.classList.add('ph');
+  v.style.color='';
+  v.textContent = n===1?'转换 LUT（Apple Log 2 → Rec.709），点列表里的 ① 填入':'风格 LUT（叠在上面），点列表里的 ② 填入';
+  renderLuts(); syncPureBtn(); updateSum();
+}
+
+/* ---------------- 输出设置 ---------------- */
+function renderFmts(formats){
+  $('fmts').innerHTML = formats.map(f=>`
+    <div class="fmt ${f.key===S.fmt?'on':''}" data-k="${f.key}">
+      <div class="t">${f.label}</div><div class="d">${f.note}</div>
+    </div>`).join('');
+  $('fmts').querySelectorAll('.fmt').forEach(el=>{
+    el.onclick=()=>{ setFmt(el.dataset.k) }
+  });
+}
+function setFmt(k){
+  S.fmt=k;
+  $('fmts').querySelectorAll('.fmt').forEach(el=>el.classList.toggle('on', el.dataset.k===k));
+  updateSum();
+}
+function renderAspects(aspects){
+  $('aspects').innerHTML = aspects.map(a=>`
+    <div class="pick ${S.aspects.has(a.key)?'on':''}" data-a="${a.key}">
+      <div class="t">${S.aspects.has(a.key)?'✓ ':''}${a.label}</div>
+      <div class="d">${a.note}</div>
+    </div>`).join('');
+  $('aspects').querySelectorAll('.pick').forEach(el=>{
+    el.onclick=()=>{
+      const k=el.dataset.a;
+      if(S.aspects.has(k)){
+        if(S.aspects.size===1) return toast('至少留一个画幅', true);
+        S.aspects.delete(k);
+      } else S.aspects.add(k);
+      renderAspects(S.env.aspects); updateSum();
+    };
+  });
+}
+function renderAudio(modes){
+  $('aSeg').innerHTML = modes.map(m=>`<button data-a="${m.key}" title="${esc(m.note)}">${m.label}</button>`).join('');
+  $('aSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>setAudio(b.dataset.a));
+  setAudio(S.audioMode);
+}
+function setAudio(k){
+  S.audioMode=k;
+  $('aSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.a===k));
+  const m=(S.env.audio_modes||[]).find(x=>x.key===k);
+  $('aLabel').textContent = m? m.label : k;
+}
+function setQuality(q){
+  S.quality=q;
+  $('qSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.q===q));
+  const mp={high:60,normal:40,small:20}[q];
+  $('qLabel').textContent = {high:'高',normal:'标准',small:'小'}[q]+' · '+mp+' Mbps';
+}
+function setMatrix(m){
+  S.matrix=m;
+  $('mSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
+  $('mLabel').textContent={auto:'自动',bt2020nc:'BT.2020',bt709:'BT.709'}[m];
+}
+$('qSeg')&&$('qSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>setQuality(b.dataset.q));
+$('mSeg')&&$('mSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>setMatrix(b.dataset.m));
+$('intensity')&&($('intensity').oninput=()=>{ $('iLabel').textContent=$('intensity').value+'%' });
+
+/* ---------------- 画面微调 ---------------- */
+function refreshGradeLabels(){
+  $('evLabel').textContent=(S.grade.exposure>=0?'+':'')+S.grade.exposure.toFixed(2)+' EV';
+  $('gcLabel').textContent=S.grade.contrast.toFixed(2);
+  $('gsLabel').textContent=S.grade.saturation.toFixed(2);
+  const t=Math.round(S.grade.temperature);
+  $('gtLabel').textContent = t===0? '0' : (t>0? '+'+t+' 暖' : t+' 冷');
+  // 有改动时标题变亮，提醒用户这不是默认值
+  const dirty = Math.abs(S.grade.exposure)>0.005 || Math.abs(S.grade.contrast-1)>0.005
+             || Math.abs(S.grade.saturation-1)>0.005 || Math.abs(S.grade.temperature)>1;
+  const sum=document.querySelector('details.adv summary');
+  if(sum) sum.textContent = dirty? '高级参数（含画面微调改动）' : '高级参数';
+}
+$('gExposure').oninput=()=>{ S.grade.exposure=(+$('gExposure').value)/100; refreshGradeLabels() };
+$('gContrast').oninput=()=>{ S.grade.contrast=(+$('gContrast').value)/100; refreshGradeLabels() };
+$('gSaturation').oninput=()=>{ S.grade.saturation=(+$('gSaturation').value)/100; refreshGradeLabels() };
+$('gTemp').oninput=()=>{ S.grade.temperature=(+$('gTemp').value); refreshGradeLabels() };
+
+/* ---------------- 体积与任务估算 ---------------- */
+function aspectAreaFactor(a){
+  const w=S.sample.width||1920, h=S.sample.height||1080;
+  if(a==='source'||!w||!h) return 1;
+  const r={'16x9':16/9,'9x16':9/16,'1x1':1,'4x5':4/5}[a];
+  if(!r) return 1;
+  const sw=w/h;
+  if(sw>r){ const nw=h*r; return Math.min(1,(nw*h)/(w*h)) }
+  const nh=w/r; return Math.min(1,(w*nh)/(w*h));
+}
+function estimate(){
+  let bytes=0;
+  const mbps = {high:60,normal:40,small:20}[S.quality];
+  const asps=[...S.aspects];
+  let factor=0;
+  for(const a of asps) factor += aspectAreaFactor(a);
+  for(const f of S.files){
+    let dur = f.duration;
+    if(!dur){
+      const s=S.sample;
+      dur = s.duration && s.size ? s.duration*(f.size/(s.size||1)) : 30;
+    }
+    let per;
+    if(S.fmt==='hevc') per = mbps*1e6/8*dur;
+    else if(S.fmt==='h264') per = mbps*0.7*1e6/8*dur;
+    else if(S.fmt==='prores') per = 147e6/8*dur/2*1.3;
+    else per = 220e6/8*dur;
+    bytes += per * (factor||1);
+  }
+  return {total: Math.round(bytes)};
+}
+function updateSum(){
+  const e=estimate();
+  const tasks = S.files.length * S.aspects.size;
+  $('sumTasks').textContent = tasks;
+  $('sumSize').textContent = S.files.length? human(e.total) : '—';
+  const n=[S.slots[1],S.slots[2]].filter(Boolean).length;
+  $('sumLut').textContent = n? (n===2?'两级 LUT 串联':'单级 LUT') : '⚠ 未选 LUT';
+  checkConvWarn();
+  $('outMeta').innerHTML = S.files.length
+    ? `<span class="chip">${S.files.length} 条 × ${S.aspects.size} 画幅 = <b>${tasks}</b> 个文件</span>`+
+      `<span class="chip">预计输出 <b>${human(e.total)}</b></span>`+
+      (S.fmt.startsWith('prores')?`<span class="chip warn">ProRes 体积大，注意磁盘空间</span>`:'')
+    : '';
+}
+
+/* 灰片却没挂转换 LUT —— 这是最容易出废片的地方，必须拦住 */
+function isLogType(t){ return ['apple_log_2','apple_log','log_other','hlg','pq'].includes(t) }
+function checkConvWarn(){
+  const box=$('convWarn');
+  if(!box) return;
+  const t=effectiveLogType();
+  if(!S.files.length || !isLogType(t) || S.slots[1]){ box.classList.remove('on'); return }
+  const hasConv = S.luts.some(l=>l.guess==='convert');
+  const hasBuiltin = (S.builtin||[]).length>0;
+  const name = (S.logInfo && S.logInfo.label) || 'Log';
+  let msg = `<b>这批素材是 ${esc(name)} 灰片，但 ① 槽还没放转换 LUT。</b><br>`+
+    `风格 LUT 直接套在灰片上会发灰、发脏、肤色发橙——那不是 LUT 不好，是顺序少了第一步。`;
+  if(hasBuiltin){
+    msg += `<br><b style="color:#f0b878">不用另外找文件</b>：工具自带一条内置还原曲线，`+
+      `点上面那个「仅色彩还原」，直接出正常画面。`;
+    if(!hasConv && S.luts.length){
+      msg += `<br>（你库里这 ${S.luts.length} 个都是风格 LUT，没有转换型的。）`;
+    }
+  } else if(!hasConv && S.luts.length){
+    msg += `<br>现在这个 LUT 库里没找到任何转换型（Log→Rec.709）的 LUT，只有风格 LUT。`+
+      `需要单独准备一个 Apple Log ${t==='apple_log'?'':'2 '}→Rec.709 的转换 LUT 才能出正常色。`;
+  }
+  box.innerHTML = msg;
+  box.classList.add('on');
+}
+
+/* ---------------- 自绘确认框（不依赖浏览器 confirm）---------------- */
+function askModal(title, body, okText, cancelText){
+  return new Promise(resolve=>{
+    const wrap=document.createElement('div');
+    wrap.style.cssText='position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.64);'+
+      'z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px';
+    const card=document.createElement('div');
+    card.style.cssText='background:#161b22;border:1px solid #2f3742;border-radius:14px;'+
+      'max-width:460px;width:100%;padding:22px 24px;box-shadow:0 24px 70px rgba(0,0,0,.65)';
+    card.innerHTML =
+      `<div style="font-size:14.5px;font-weight:650;color:#e6ebf2;margin-bottom:11px">${esc(title)}</div>`+
+      `<div style="font-size:12.5px;line-height:1.78;color:#9aa5b4;white-space:pre-wrap">${esc(body)}</div>`+
+      `<div style="display:flex;gap:9px;justify-content:flex-end;margin-top:22px">`+
+        `<button class="btn sm" id="mkNo">${esc(cancelText||'取消')}</button>`+
+        `<button class="btn sm primary" id="mkYes">${esc(okText||'继续')}</button>`+
+      `</div>`;
+    wrap.appendChild(card);
+    document.body.appendChild(wrap);
+
+    let settled=false;
+    const done=(v)=>{
+      if(settled) return;
+      settled=true;
+      document.removeEventListener('keydown', onKey);
+      wrap.remove();
+      resolve(v);
+    };
+    const onKey=(e)=>{
+      if(e.key==='Escape'){ e.preventDefault(); done(false) }
+      else if(e.key==='Enter'){ e.preventDefault(); done(true) }
+    };
+    card.querySelector('#mkYes').onclick=()=>done(true);
+    card.querySelector('#mkNo').onclick=()=>done(false);
+    wrap.onclick=(e)=>{ if(e.target===wrap) done(false) };
+    document.addEventListener('keydown', onKey);
+    setTimeout(()=>{ try{ card.querySelector('#mkYes').focus() }catch(e){} }, 30);
+  });
+}
+
+/* ---------------- 任务 ---------------- */
+async function startJob(){
+  const payload={
+    input_dir: $('inDir').value.trim(),
+    output_dir: $('outDir').value.trim(),
+    lut_dir: $('lutDir').value.trim(),
+    luts: [S.slots[1],S.slots[2]].filter(Boolean),
+    format: S.fmt, quality: S.quality, matrix: S.matrix,
+    intensity: (+$('intensity').value)/100,
+    suffix: $('suffix').value, skip_existing: $('skipExist').checked,
+    aspects: [...S.aspects],
+    audio_mode: S.audioMode,
+    grade: S.grade,
+    log_override: S.logOverride
+  };
+  if(!payload.input_dir) return toast('先选素材文件夹',true);
+  if(!payload.output_dir) return toast('先选导出文件夹',true);
+  // 同一个目录会把输出和原片混在一起，下次扫描还会把输出当成素材
+  const norm = s => String(s||'').replace(/\/+$/,'').trim();
+  if(norm(payload.output_dir) === norm(payload.input_dir)){
+    const go = await askModal('导出目录和素材目录是同一个',
+      '导出的文件会和原片混在一起，下次扫描还会把导出结果当成素材扫进来（素材数量翻倍、Log 判定也可能被带偏）。\n\n建议换个目录，比如在素材文件夹里新建一个「LUT输出」。',
+      '就这样继续', '换个目录');
+    if(!go) return;
+  }
+  if(!payload.luts.length){
+    const go = await askModal('一个 LUT 都没选',
+      '这样导出只会修正色彩标签，画面不会有任何调色变化。\n\n如果是灰片，建议先点「仅色彩还原」，或往两个槽里各选一个 LUT。',
+      '仍然导出', '回去选 LUT');
+    if(!go) return;
+  }
+  const n = S.files.length*S.aspects.size;
+  if(n>40){
+    const go = await askModal('要生成 '+n+' 个文件',
+      '素材 ' + S.files.length + ' 条 × 画幅 ' + S.aspects.size + ' 种 = ' + n + ' 个文件。\n\n确认开始？',
+      '开始', '再想想');
+    if(!go) return;
+  }
+  try{
+    await api('/api/start', payload);
+    _logN = 0; $('log').innerHTML='';
+    $('prog').classList.add('on'); $('log').classList.add('on');
+    $('btnStart').disabled=true;
+    const bs=$('btnStop'); bs.style.display='inline-block'; bs.disabled=false; bs.textContent='停止';
+    $('runHint').textContent='运行中';
+    $('runMeta').innerHTML='';
+    poll(true);
+  }catch(e){ toast(e.message,true) }
+}
+async function stopJob(){
+  const b = $('btnStop');
+  if(b.disabled) return;
+  b.disabled = true; b.textContent = '正在停止…';
+  if($('runHint')) $('runHint').textContent = '正在停止';
+  if($('cur')) $('cur').textContent = '正在掐断当前 ffmpeg，半成品会被删掉…';
+  try{
+    await api('/api/stop',{});
+    toast('已停止');
+  }catch(e){ toast(e.message,true) }
+}
+
+function resetStopBtn(){
+  const b = $('btnStop');
+  if(!b) return;
+  b.disabled = false; b.textContent = '停止';
+  b.style.display = 'none';
+}
+
+function poll(force){
+  if(S.polling) clearTimeout(S.polling);
+  const tick=async()=>{
+    try{
+      const j=await api('/api/job');
+      renderJob(j);
+      if(j.running){ S.polling=setTimeout(tick,400) }
+      else{
+        S.polling=null;
+        $('btnStart').disabled=false; resetStopBtn();
+        $('runHint').textContent = j.finished_at ? (j.stopped ? '已停止' : '已结束') : '就绪';
+        if(j.finished_at) renderRunMeta(j);
+      }
+    }catch(e){ S.polling=setTimeout(tick,1500) }
+  };
+  tick();
+}
+function renderJob(j){
+  $('pct').textContent = (j.percent||0).toFixed(j.percent>9?0:1)+'%';
+  $('cur').textContent = j.current || '等待开始';
+  const parts=[];
+  if(j.total) parts.push(`${j.done}/${j.total}`);
+  if(j.speed) parts.push(j.speed);
+  if(j.eta) parts.push('剩 '+j.eta);
+  $('stat').textContent=parts.join('  ·  ');
+  $('barFill').style.width=(j.percent||0)+'%';
+  $('barSub').style.width=(j.file_percent||0)+'%';
+  renderLog(j.log);
+}
+let _logN = 0;
+function renderLog(log){
+  if(!log) return;
+  const box=$('log');
+  if(log.length < _logN){ box.innerHTML=''; _logN=0; }      // 换任务了，重来
+  if(log.length === _logN) return;
+  const atBottom = box.scrollHeight-box.scrollTop-box.clientHeight < 80;
+  let html='';
+  for(let i=_logN;i<log.length;i++){
+    const l=log[i];
+    html += `<div class="${l.lv}"><i>${l.t}</i>${esc(l.m)}</div>`;
+  }
+  if(_logN===0) box.innerHTML=html; else box.insertAdjacentHTML('beforeend',html);
+  _logN = log.length;
+  if(atBottom) box.scrollTop=box.scrollHeight;
+}
+function renderRunMeta(j){
+  const ok=Math.max(0,j.done-j.failed-j.skipped);
+  let h =
+    `<span class="chip good">成功 <b>${ok}</b></span>`+
+    (j.failed?`<span class="chip bad">失败 <b>${j.failed}</b></span>`:'')+
+    (j.skipped?`<span class="chip">跳过 <b>${j.skipped}</b></span>`:'')+
+    (j.stopped?`<span class="chip" style="color:#f09086;border-color:#6d3a34">已停止 <b>${j.stopped}</b></span>`:'')+
+    (j.done_bytes?`<span class="chip">输出 <b>${human(j.done_bytes)}</b></span>`:'')+
+    `<span class="chip" style="cursor:pointer" onclick="openDir('${(j.out_dir||'').replace(/'/g,"")}')">📂 打开导出文件夹</span>`;
+  if(j.report){
+    h += `<span class="chip good" style="cursor:pointer" onclick="revealReport()">📄 导出报告</span>`;
+  }
+  $('runMeta').innerHTML=h;
+  S._report = j.report||'';
+  if(j.errors && j.errors.length){
+    // 失败原因汇总，不用翻日志
+    const uniq = [...new Set(j.errors.map(e=>String(e.err||'').split('\n').pop()))].slice(0,3);
+    $('runMeta').insertAdjacentHTML('beforeend',
+      `<span class="chip bad" title="${esc(uniq.join('\n'))}">${j.errors.length} 条失败，鼠标悬停看原因</span>`);
+  }
+}
+async function revealReport(){
+  if(!S._report) return;
+  try{ await api('/api/reveal',{path:S._report}) }catch(e){ toast(e.message,true) }
+}
+function codecName(c){
+  const map={hevc:'HEVC',h264:'H.264',prores:'ProRes',av1:'AV1',vp9:'VP9',mpeg4:'MPEG-4'};
+  return map[String(c).toLowerCase()] || String(c).toUpperCase();
+}
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;') }
+
+/* ---------------- 试色板 ---------------- */
+function useFirst(){
+  if(S.files[0]) $('pvFile').value=S.files[0].path;
+  else toast('先读取素材文件夹',true);
+}
+async function runPreview(){
+  let path=$('pvFile').value.trim();
+  if(!path && S.files[0]) path=S.files[0].path;
+  if(!path) return toast('先读取素材文件夹',true);
+  let list=[...S.checked];
+  if(!list.length){
+    const kw=$('lutFilter').value.trim().toLowerCase();
+    list=S.luts.filter(l=>!kw||l.name.toLowerCase().includes(kw)).slice(0,12).map(l=>l.path);
+  }
+  if(!list.length) return toast('没有可试色的 LUT',true);
+  if(list.length>24) list=list.slice(0,24);
+  $('pvMeta').innerHTML='<span class="chip">正在渲染 '+list.length+' 张…</span>';
+  $('pvGrid').innerHTML='';
+  try{
+    const r=await api('/api/preview',{
+      path, base:S.slots[1]||null, luts:list,
+      matrix:S.matrix, intensity:(+$('intensity').value)/100,
+      grade:S.grade
+    });
+    const ok=r.items.filter(i=>i.url);
+    $('pvMeta').innerHTML=`<span class="chip">抽帧位置 <b>${r.at}s</b></span><span class="chip">${ok.length} 张</span>`
+      + (S.slots[1]?`<span class="chip">底座：${esc(baseName(S.slots[1]))}</span>`:'<span class="chip warn">未选转换 LUT，直接叠风格 LUT</span>');
+    $('pvGrid').innerHTML=r.items.map(i=>i.url
+      ? `<div class="pvc"><img src="${i.url}" loading="lazy" alt=""><div class="n" title="${esc(i.name)}">${esc(i.name)}</div></div>`
+      : `<div class="pvc"><div class="n" style="padding:30px 8px;color:var(--err)">${esc(i.name)} 渲染失败</div></div>`
+    ).join('');
+    toast('试色板生成完毕');
+  }catch(e){ $('pvMeta').innerHTML=''; toast(e.message,true) }
+}
+
+/* ---------------- 事件绑定 ---------------- */
+$('inDir').addEventListener('keydown',e=>{ if(e.key==='Enter') scanInput() });
+$('inDir').addEventListener('change',()=>scanInput(true));
+$('lutDir').addEventListener('keydown',e=>{ if(e.key==='Enter') scanLut() });
+$('lutDir').addEventListener('change',()=>scanLut(true));
+$('lutFilter').addEventListener('input',()=>{ S.filterRecent=false; renderLuts() });
+$('outDir').addEventListener('change',()=>setFmt(S.fmt));
+boot();
+</script>
+</body>
+</html>
