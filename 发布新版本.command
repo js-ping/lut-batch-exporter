@@ -50,10 +50,14 @@ fi
 
 # ---------- 5. 打安装包 ----------
 echo "▶ 打包 macOS 安装包…"
+# 注意：config.json / lut_*.json 里是**本机路径和私人设置**，绝不能进公开安装包
 rm -rf /tmp/lut_pack && mkdir -p /tmp/lut_pack/LUT批量导出器
 rsync -a \
   --exclude '.git' --exclude '开发' --exclude '运行记录' \
   --exclude '.DS_Store' --exclude '发布新版本.command' \
+  --exclude '__pycache__' \
+  --exclude '程序/config.json' --exclude '程序/lut_fav.json' \
+  --exclude '程序/lut_hidden.json' --exclude '程序/lut_meta.json' \
   ./ /tmp/lut_pack/LUT批量导出器/
 python3 - <<'PY'
 import os, zipfile
