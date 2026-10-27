@@ -1305,7 +1305,13 @@ async function doEstimate(){
     if($('sumDur'))  $('sumDur').textContent  = r.media_sec? fmtDur(r.media_sec) : '—';
     if($('sumTime')) $('sumTime').textContent = r.est_sec? friendlyDur(r.est_sec)+'（估）' : '—';
     paintTime(null);
-  }catch(e){ /* 预估失败不影响正常导出 */ }
+  }catch(e){
+    // 预估失败不影响正常导出，但别把上一次的旧数字继续挂在界面上
+    S.est = null;
+    if($('sumDur'))  $('sumDur').textContent  = '—';
+    if($('sumTime')) $('sumTime').textContent = '—';
+    paintTime(null);
+  }
 }
 function friendlyDur(s){
   s = Math.max(0, Math.round(s||0));
