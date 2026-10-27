@@ -20,8 +20,11 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import lut_analyze
+
 APP_NAME = "LUT 批量导出器"
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # 工具包根目录
 PROG = os.path.join(ROOT, "程序")
@@ -32,6 +35,8 @@ THUMBS = os.path.join(RECORDS, "试色板")
 CONFIG_PATH = os.path.join(PROG, "config.json")
 FAV_PATH = os.path.join(PROG, "lut_fav.json")
 HIDDEN_PATH = os.path.join(PROG, "lut_hidden.json")
+LUT_META_PATH = os.path.join(PROG, "lut_meta.json")     # LUT 曲线分析结果缓存
+LUT_META_VER = 2                    # 判断算法版本：改算法就 +1，旧缓存自动失效
 PROBE_CACHE_PATH = os.path.join(CACHE, "probe_cache.json")
 DETECT_CACHE_PATH = os.path.join(CACHE, "detect_cache.json")
 
@@ -89,7 +94,13 @@ def human_size(n):
 
 
 def fmt_dur(sec):
-    sec = int(max(0, sec))
+    """秒 → 时长文本。超过 1 小时带小时位，免得出现「97:30」这种看不懂的写法。"""
+    try:
+        sec = int(max(0, round(float(sec or 0))))
+    except (TypeError, ValueError):
+        sec = 0
+    if sec >= 3600:
+        return "%d:%02d:%02d" % (sec // 3600, (sec % 3600) // 60, sec % 60)
     return "%02d:%02d" % (sec // 60, sec % 60)
 
 
@@ -387,6 +398,12 @@ def match_convert_lut(luts, log_type):
             score += 2
         if l.get("guess") == "convert":
             score += 2
+        # 曲线判定比文件名靠得住：明显是「709 用」的直接压下去，别把风格 LUT 当转换用
+        dom = l.get("domain")
+        if dom == "log":
+            score += 6
+        elif dom == "709":
+            score -= 9
         if score > best_score:
             best, best_score = l, score
     return best
@@ -412,8 +429,53 @@ def list_videos(folder):
     return items
 
 
+def load_lut_meta():
+    d = load_json(LUT_META_PATH, {})
+    return d if isinstance(d, dict) else {}
+
+
+def save_lut_meta(d):
+    save_json(LUT_META_PATH, d)
+
+
+def analyze_lut(path, name, meta, changed):
+    """
+    读取并按缓存返回这个 LUT 的输入色域判定。
+
+    缓存键是「算法版本 + 路径 + 大小 + mtime」：LUT 文件换了内容会自动重算，
+    判断算法升级之后旧结论也不会被继续沿用。
+    changed 是个单元素 list，用作「本轮有改动」的标记。
+    """
+    try:
+        st = os.stat(path)
+        stamp = "v%d|%d:%d" % (LUT_META_VER, st.st_size, int(st.st_mtime))
+    except OSError:
+        return {"domain": "unknown", "confidence": "none", "reason": "文件读不到", "sig": None}
+
+    rec = meta.get(path)
+    if isinstance(rec, dict) and rec.get("stamp") == stamp:
+        return rec
+
+    sig = lut_analyze.read_cube_signature(path)
+    res = lut_analyze.classify(sig, name)
+    rec = {
+        "stamp": stamp,
+        "domain": res["domain"],
+        "confidence": res["confidence"],
+        "reason": res["reason"],
+        "slope": (sig or {}).get("mid_slope"),
+        "black": (sig or {}).get("black"),
+        "sig": sig,
+    }
+    meta[path] = rec
+    changed[0] = True
+    return rec
+
+
 def list_luts(folder):
     items = []
+    meta = load_lut_meta()
+    changed = [False]
     for dirpath, dirnames, filenames in os.walk(folder):
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
         for fn in filenames:
@@ -425,15 +487,25 @@ def list_luts(folder):
             except OSError:
                 continue
             rel = os.path.relpath(full, folder)
+            name = os.path.splitext(fn)[0]
+            a = analyze_lut(full, name, meta, changed)
             items.append({
-                "name": os.path.splitext(fn)[0],
+                "name": name,
                 "file": fn,
                 "rel": rel,
                 "group": os.path.dirname(rel) or ".",
                 "path": full,
                 "size": st.st_size,
                 "guess": guess_lut_type(fn),
+                # domain：这个 LUT 该喂什么素材 —— log / 709 / unknown
+                "domain": a.get("domain", "unknown"),
+                "domain_conf": a.get("confidence", "none"),
+                "domain_reason": a.get("reason", ""),
+                "slope": a.get("slope"),
+                "black": a.get("black"),
             })
+    if changed[0]:
+        save_lut_meta(meta)
     items.sort(key=lambda x: natural_key(x["rel"]))
     return items
 
@@ -604,6 +676,37 @@ QUALITY = {
     "small": {"label": "小", "bitrate": 20},
 }
 
+
+# ---------------------------------------------------------------- 时长预估
+#
+# 在本机（Apple M3）用真实命令实测标定，源是 ProRes 422HQ、一级 LUT、40 Mbps：
+#     输出尺寸            HEVC       H.264      ProRes 422
+#     3840×2160 (8.3MP)   0.89x      0.93x      0.31x
+#     1920×1080 (2.1MP)   3.16x      3.47x      —
+# 把「速度 × 百万像素」算出来基本是常数，所以按输出像素数反推，
+# 而不是按「1080p / 4K」分类 —— 画幅裁切之后像素变少、速度变快也能自动算进去。
+SPEED_K = {"hevc": 7.0, "h264": 7.4, "prores": 2.6, "prores_hq": 2.1}
+
+
+def est_speed(width, height, fmt_key, quality="normal", n_lut=1, blended=False):
+    """预估编码速度（媒体秒 / 墙钟秒）。只用于开始前给个量级，跑起来后以实测为准。"""
+    try:
+        w = int(width) or 1920
+        h = int(height) or 1080
+    except (TypeError, ValueError):
+        w, h = 1920, 1080
+    mpix = max(0.2, (w * h) / 1e6)
+    k = SPEED_K.get(fmt_key, SPEED_K["hevc"])
+    if quality == "high":
+        k *= 0.97
+    elif quality == "small":
+        k *= 1.04
+    # 每多一级 lut3d 大约多一成 CPU；强度不满 100% 时 blend 还要再算一遍
+    k *= max(0.6, 1.0 - 0.12 * (max(1, int(n_lut)) - 1))
+    if blended:
+        k *= 0.72
+    return max(0.05, k / mpix)
+
 # 一次导出多个画幅：素材只解码一遍，同时产出横屏/竖屏/方形版本
 ASPECTS = {
     "source": {"label": "原画幅", "ratio": None, "suffix": "", "note": "保持素材原始比例"},
@@ -619,6 +722,70 @@ AUDIO_MODES = {
     "mono": {"label": "转单声道", "note": "给口播/采访统一声道"},
     "normalize": {"label": "响度标准化", "note": "-16 LUFS，各条素材音量一致"},
 }
+
+
+def estimate_plan(cfg, files):
+    """估算整批任务：出多少文件、素材总多长、大概要跑多久。
+
+    「需要多久」和「还剩多久」都从这里出发：这里给的是开工前的预估值，
+    跑起来之后前端改用 ffmpeg 实测速度算剩余，比这里准得多。
+    """
+    fmt_key = cfg.get("format", "hevc")
+    enc = ENCODERS.get(fmt_key) or ENCODERS["hevc"]
+    quality = cfg.get("quality", "normal")
+    aspects = [a for a in (cfg.get("aspects") or ["source"]) if a in ASPECTS] or ["source"]
+    suffix = cfg.get("suffix", "") or ""
+    out_dir = cfg.get("output_dir") or ""
+    skip_existing = cfg.get("skip_existing", True)
+    n_lut = len([x for x in (cfg.get("luts") or []) if x])
+    try:
+        intensity = float(cfg.get("intensity") or 1.0)
+    except (TypeError, ValueError):
+        intensity = 1.0
+    blended = n_lut > 0 and intensity < 0.999
+
+    tasks = todo = 0
+    media = est = 0.0
+    per_aspect = {}
+    for item in files:
+        info = probe_cached(item["path"])
+        dur = info.get("duration") or 0
+        rel = item.get("rel") or item.get("name") or ""
+        base = os.path.splitext(os.path.basename(rel))[0]
+        sub = os.path.dirname(rel)
+        for aspect in aspects:
+            tasks += 1
+            tail = base + suffix + ASPECTS[aspect]["suffix"] + enc["ext"]
+            dst = os.path.join(out_dir, sub, tail) if (sub and out_dir) else (
+                os.path.join(out_dir, tail) if out_dir else "")
+            if skip_existing and dst and os.path.exists(dst) and os.path.getsize(dst) > 1024:
+                continue
+            todo += 1
+            media += dur
+            crop = crop_rect(info.get("width"), info.get("height"), ASPECTS[aspect]["ratio"])
+            if crop:
+                w, h = crop[0], crop[1]
+            else:
+                w, h = info.get("width") or 1920, info.get("height") or 1080
+            sp = est_speed(w, h, fmt_key, quality, n_lut, blended)
+            est += dur / sp
+            pa = per_aspect.setdefault(aspect, {"sec": 0.0, "n": 0})
+            pa["sec"] += dur / sp
+            pa["n"] += 1
+
+    return {
+        "tasks": tasks,
+        "todo": todo,
+        "skip": tasks - todo,
+        "media_sec": round(media, 1),
+        "est_sec": round(est, 1),
+        "media_txt": fmt_dur(media),
+        "est_txt": fmt_dur(est),
+        "speed": round(media / est, 2) if est > 0.5 else 0,
+        "per_aspect": [{"key": k, "sec": round(v["sec"], 1), "n": v["n"]}
+                       for k, v in per_aspect.items()],
+        "rough": True,
+    }
 
 
 def detect_lut_opt():
@@ -786,6 +953,10 @@ JOB = {
     "file_percent": 0.0, "speed": "", "eta": "", "log": [], "errors": [],
     "started_at": 0, "finished_at": 0, "out_dir": "", "total_bytes": 0,
     "done_bytes": 0, "report": "", "aspects": [],
+    # 时长：total_sec = 待处理素材总长（媒体秒），done_sec = 已处理过的媒体秒，
+    # eta_sec = 还要等多少墙钟秒，est_sec = 整批预计墙钟秒（已用 + 剩余）
+    "total_sec": 0.0, "done_sec": 0.0, "eta_sec": -1.0, "est_sec": -1.0,
+    "speed_num": 0.0, "start_est_sec": -1.0,
 }
 JOB_LOCK = threading.Lock()
 RUNNING_PROC = {"p": None}          # 当前正在跑的 ffmpeg，退出时一并结束
@@ -901,6 +1072,18 @@ def run_job(cfg):
         return
     remember_lut(luts)
 
+    # 预扫：先把整批素材总时长算出来 —— 「需要多久 / 还剩多久」全靠它
+    est = estimate_plan(cfg, files)
+    with JOB_LOCK:
+        JOB["total_sec"] = est["media_sec"]
+        JOB["start_est_sec"] = est["est_sec"]
+        JOB["est_sec"] = est["est_sec"]
+        JOB["eta_sec"] = est["est_sec"]
+        JOB["done_sec"] = 0.0
+        JOB["speed_num"] = 0.0
+    jlog("素材总时长 %s，预计整批需要 %s（按本机实测速度估，开始后会实时校正）" % (
+        est["media_txt"], est["est_txt"]), "time")
+
     t0 = time.time()
     n = 0
     rows = []
@@ -925,9 +1108,12 @@ def run_job(cfg):
 
         if skip_existing and os.path.exists(dst) and os.path.getsize(dst) > 1024:
             jlog("[%d/%d] 跳过（已存在）：%s" % (n, len(tasks), dst_name), "skip")
+            skip_sec = probe_cached(item["path"]).get("duration") or 0
             with JOB_LOCK:
                 JOB["skipped"] += 1
                 JOB["done"] += 1
+                # 跳过的也要算进「已处理」，否则跑完了剩余时长还挂着不为 0
+                JOB["done_sec"] = round(JOB["done_sec"] + skip_sec, 1)
             rows.append({"状态": "跳过", "素材": rel, "画幅": ASPECTS[aspect]["label"],
                          "输出文件": dst_name, "备注": "目标已存在"})
             continue
@@ -941,6 +1127,7 @@ def run_job(cfg):
             with JOB_LOCK:
                 JOB["failed"] += 1
                 JOB["done"] += 1
+                JOB["done_sec"] = round(JOB["done_sec"] + (info.get("duration") or 0), 1)
                 JOB["errors"].append({"file": rel, "err": note})
             jlog("  ✗ 跳过 %s：%s" % (rel, note), "error")
             rows.append({"状态": "失败", "素材": rel, "画幅": ASPECTS[aspect]["label"],
@@ -961,7 +1148,9 @@ def run_job(cfg):
         cmd = build_cmd(item["path"], dst, staged, fmt_key, cfg.get("quality", "normal"),
                         o, info)
         tf = time.time()
-        ok, err, stopped = exec_ffmpeg(cmd, dur)
+        with JOB_LOCK:
+            sec_base = JOB["done_sec"]        # 这条素材开始前的媒体秒基线
+        ok, err, stopped = exec_ffmpeg(cmd, dur, sec_base=sec_base)
         took = time.time() - tf
 
         if stopped and not ok:
@@ -988,6 +1177,8 @@ def run_job(cfg):
             with JOB_LOCK:
                 JOB["done"] += 1
                 JOB["done_bytes"] += sz
+                # 以实际时长为准，不沿用进度值，免得误差累积
+                JOB["done_sec"] = round(sec_base + dur, 1)
             out_info = probe(dst)
             jlog("  ✓ %s（%s，耗时 %s）" % (dst_name, human_size(sz), fmt_dur(took)), "ok")
             rows.append({
@@ -1004,6 +1195,7 @@ def run_job(cfg):
             with JOB_LOCK:
                 JOB["failed"] += 1
                 JOB["done"] += 1
+                JOB["done_sec"] = round(sec_base + dur, 1)
                 JOB["errors"].append({"file": rel, "err": err})
             jlog("  ✗ 失败 %s：%s" % (rel, err.splitlines()[-1] if err else "未知错误"), "error")
             rows.append({"状态": "失败", "素材": rel, "画幅": ASPECTS[aspect]["label"],
@@ -1021,6 +1213,9 @@ def run_job(cfg):
         stopped_n = JOB["stopped"]
         if not stopped_n:
             JOB["percent"] = 100.0
+            JOB["done_sec"] = JOB["total_sec"]
+        JOB["eta_sec"] = 0.0
+        JOB["est_sec"] = round(el, 1)
         JOB["finished_at"] = time.time()
 
     report = write_report(out_dir, rows, cfg, el)
@@ -1069,8 +1264,12 @@ def stop_running_proc(grace=1.2):
     return True
 
 
-def exec_ffmpeg(cmd, duration):
-    """执行 ffmpeg 并解析进度。返回 (成功, 错误输出, 是否被用户中断)。"""
+def exec_ffmpeg(cmd, duration, sec_base=0.0):
+    """执行 ffmpeg 并解析进度。返回 (成功, 错误输出, 是否被用户中断)。
+
+    sec_base：这条素材开始前已经处理过的媒体秒数。用它加上当前片内进度，
+    就能在整批范围内实时算「已处理多长 / 还剩多久」，而不是等这条跑完才跳一次。
+    """
     try:
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
         RUNNING_PROC["p"] = p
@@ -1079,6 +1278,7 @@ def exec_ffmpeg(cmd, duration):
 
     err_buf = []
     t_start = time.time()
+    job_start = float(JOB.get("started_at") or t_start)
     interrupted = {"v": False}
 
     def read_err():
@@ -1112,37 +1312,66 @@ def exec_ffmpeg(cmd, duration):
 
     threading.Thread(target=watchdog, daemon=True).start()
 
+    def update_clock(cur, sp):
+        """把片内进度换算成整批的时间账。"""
+        media_done = sec_base + cur
+        total_sec = float(JOB.get("total_sec") or 0)
+        left = max(0.0, total_sec - media_done) if total_sec > 0 else -1.0
+        # speed 有时会是 N/A，退回用「已处理媒体秒 / 已流逝墙钟秒」自己算
+        if sp <= 0.05:
+            el = time.time() - job_start
+            if el > 2.0 and media_done > 0.5:
+                sp = media_done / el
+        eta = (left / sp) if (left >= 0 and sp > 0.05) else -1.0
+        with JOB_LOCK:
+            JOB["done_sec"] = round(media_done, 1)
+            if sp > 0.05:
+                JOB["speed_num"] = round(sp, 2)
+                JOB["speed"] = "%.2fx" % sp
+            if eta >= 0:
+                JOB["eta_sec"] = round(eta, 1)
+                JOB["est_sec"] = round(max(0.0, time.time() - job_start) + eta, 1)
+                JOB["eta"] = fmt_dur(eta)
+
     for line in p.stdout:
         line = line.strip()
         if "=" not in line:
             continue
         k, _, v = line.partition("=")
-        if k == "out_time_us" and duration > 0:
+        if k == "out_time_us":
             try:
                 cur = int(v) / 1e6
-                pct = min(99.9, cur / duration * 100.0)
-                with JOB_LOCK:
-                    JOB["file_percent"] = round(pct, 1)
-                    if JOB["total"]:
-                        JOB["percent"] = round((JOB["done"] + pct / 100.0) / JOB["total"] * 100, 1)
+                if duration > 0:
+                    pct = min(99.9, cur / duration * 100.0)
+                    with JOB_LOCK:
+                        JOB["file_percent"] = round(pct, 1)
+                        if JOB["total"]:
+                            JOB["percent"] = round((JOB["done"] + pct / 100.0) / JOB["total"] * 100, 1)
+                update_clock(cur, float(JOB.get("speed_num") or 0))
             except Exception:
                 pass
         elif k == "speed":
+            sp = 0.0
+            try:
+                sp = float(str(v).rstrip("xX"))
+            except (TypeError, ValueError):
+                sp = 0.0
             with JOB_LOCK:
                 JOB["speed"] = v
+            if duration > 0:
+                try:
+                    update_clock(float(JOB.get("file_percent") or 0) / 100.0 * duration, sp)
+                except Exception:
+                    pass
 
     p.wait()
     RUNNING_PROC["p"] = None
     th.join(timeout=2)
 
+    # 收尾时按整条素材跑完再校一次，避免最后停在 99% 上把剩余时长算成非零
     try:
-        if duration > 0 and JOB["total"]:
-            el = time.time() - t_start
-            fp = max(1.0, JOB["file_percent"])
-            per_file = el / (fp / 100.0)
-            left = (JOB["total"] - JOB["done"] - 1) * per_file + per_file * (1 - fp / 100.0)
-            with JOB_LOCK:
-                JOB["eta"] = fmt_dur(left)
+        if duration > 0:
+            update_clock(duration, float(JOB.get("speed_num") or 0))
     except Exception:
         pass
 
@@ -1281,6 +1510,20 @@ class Handler(BaseHTTPRequestHandler):
             save_json(FAV_PATH, fav)
             return self._json(fav)
 
+        if p == "/api/estimate":
+            folder = d.get("input_dir") or ""
+            if not os.path.isdir(folder):
+                return self._json({"error": "文件夹不存在"}, 400)
+            files = list_videos(folder)
+            if not files:
+                return self._json({"tasks": 0, "todo": 0, "skip": 0, "media_sec": 0,
+                                   "est_sec": 0, "media_txt": "00:00",
+                                   "est_txt": "00:00", "speed": 0, "rough": True})
+            try:
+                return self._json(estimate_plan(d, files))
+            except Exception as e:
+                return self._json({"error": "预估失败：%s" % e}, 500)
+
         if p == "/api/start":
             with JOB_LOCK:
                 if JOB["running"]:
@@ -1300,6 +1543,8 @@ class Handler(BaseHTTPRequestHandler):
                     "errors": [], "started_at": time.time(), "finished_at": 0,
                     "out_dir": d["output_dir"], "done_bytes": 0,
                     "report": "", "aspects": d.get("aspects", ["source"]),
+                    "total_sec": 0.0, "done_sec": 0.0, "eta_sec": -1.0,
+                    "est_sec": -1.0, "speed_num": 0.0, "start_est_sec": -1.0,
                 })
             save_config({
                 "input_dir": d.get("input_dir"), "output_dir": d.get("output_dir"),

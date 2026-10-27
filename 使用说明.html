@@ -128,17 +128,25 @@ tbody tr:nth-child(even){background:color-mix(in srgb,var(--line) 22%,transparen
 <p><code>程序/luts/</code> 下两个 <code>.cube</code> 文件，各约 950 KB。</p>
 <p>想重新生成、或者想自己改参数：双击终端跑 <code>python3 开发/make_builtin_luts.py</code>（会先自检曲线再生成）。</p>
 <h3 id="②-lut-库">② LUT 库</h3>
-<div class="tw"><table><thead><tr><th>元素</th><th>行为</th></tr></thead><tbody><tr><td data-label="元素"><strong>选择</strong></td><td data-label="行为">选 LUT 所在文件夹，会连子文件夹一起扫</td></tr><tr><td data-label="元素">搜索框</td><td data-label="行为">边打边过滤，文件名和所在文件夹名都参与匹配</td></tr><tr><td data-label="元素"><strong>☆ / ★</strong></td><td data-label="行为"><strong>收藏</strong>。点一下收藏，再点一下取消。收藏记在本地</td></tr><tr><td data-label="元素"><strong>★ 只看收藏</strong></td><td data-label="行为">只显示收藏过的 LUT。库里几百个的时候，把常用的十几个收藏起来，以后一开就是这个短列表</td></tr><tr><td data-label="元素"><strong>最近用过</strong></td><td data-label="行为">显示最近 12 个用过（真正跑过批处理）的 LUT</td></tr><tr><td data-label="元素">每行左边的勾选框</td><td data-label="行为">标记「待试色」，试色板只渲染勾上的</td></tr><tr><td data-label="元素">每行的 <strong>①</strong></td><td data-label="行为">填进「转换 LUT」槽 —— Apple Log 2 → Rec.709 的技术转换</td></tr><tr><td data-label="元素">每行的 <strong>②</strong></td><td data-label="行为">填进「风格 LUT」槽 —— 叠在上面的创作风格</td></tr><tr><td data-label="元素"><strong>勾选当前筛选结果</strong></td><td data-label="行为">一次勾上当前搜出来的前 24 个，适合「这批 LUT 全试一遍」</td></tr><tr><td data-label="元素"><strong>清空勾选</strong></td><td data-label="行为">取消全部试色标记</td></tr><tr><td data-label="元素">每行最右的 <strong>✕</strong></td><td data-label="行为"><strong>从列表移除</strong>。只影响列表显示，磁盘上的 <code>.cube</code> 文件一个都不动</td></tr><tr><td data-label="元素"><strong>已隐藏 N · 恢复</strong></td><td data-label="行为">出现在列表标题旁，点一下把所有收起来的 LUT 放回来</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>元素</th><th>行为</th></tr></thead><tbody><tr><td data-label="元素"><strong>选择</strong></td><td data-label="行为">选 LUT 所在文件夹，会连子文件夹一起扫</td></tr><tr><td data-label="元素">搜索框</td><td data-label="行为">边打边过滤，文件名和所在文件夹名都参与匹配</td></tr><tr><td data-label="元素"><strong>☆ / ★</strong></td><td data-label="行为"><strong>收藏</strong>。点一下收藏，再点一下取消。收藏记在本地</td></tr><tr><td data-label="元素"><strong>★ 只看收藏</strong></td><td data-label="行为">只显示收藏过的 LUT。库里几百个的时候，把常用的十几个收藏起来，以后一开就是这个短列表</td></tr><tr><td data-label="元素"><strong>最近用过</strong></td><td data-label="行为">显示最近 12 个用过（真正跑过批处理）的 LUT</td></tr><tr><td data-label="元素">每行左边的勾选框</td><td data-label="行为">标记「待试色」，试色板只渲染勾上的</td></tr><tr><td data-label="元素">每行的 <strong>①</strong></td><td data-label="行为">填进「转换 LUT」槽 —— Apple Log 2 → Rec.709 的技术转换</td></tr><tr><td data-label="元素">每行的 <strong>②</strong></td><td data-label="行为">填进「风格 LUT」槽 —— 叠在上面的创作风格</td></tr><tr><td data-label="元素"><strong>全选筛选结果 / 反选 / 清空勾选</strong></td><td data-label="行为">批量勾选试色用。也可以按住鼠标拖过一串方框刷选，或 Shift + 点击选一整段</td></tr><tr><td data-label="元素">每行最右的 <strong>✕</strong></td><td data-label="行为"><strong>从列表移除</strong>。只影响列表显示，磁盘上的 <code>.cube</code> 文件一个都不动</td></tr><tr><td data-label="元素"><strong>已隐藏 N · 恢复</strong></td><td data-label="行为">出现在列表标题旁，点一下把所有收起来的 LUT 放回来</td></tr></tbody></table></div>
+<h4 id="log-用-709-用-判不准-这枚徽章是什么意思">「Log 用 / 709 用 / 判不准」这枚徽章是什么意思</h4>
+<p>这是这个工具最容易被忽略、但最容易出废片的地方：</p>
+<ul><li><strong>Log 用</strong> —— 这个 LUT 设计给<strong>未还原的 Log 灰片</strong>。套上去会把扁平的灰片拉开反差，一般就是转换 / CST 型</li><li><strong>709 用</strong> —— 设计给<strong>已经还原成 Rec.709 的正常画面</strong>。直接套在灰片上会发灰、发脏、肤色发橙</li><li><strong>判不准</strong> —— 曲线特征不明显，文件名也没有线索。悬停能看实测数字，建议先用试色板看一眼</li></ul>
+<p><strong>为什么不只看文件名</strong>：同一个「万能 LUT 包」，有的文件叫 <code>AppleLog2_to_Rec709</code>，有的就叫 <code>01-风光人像</code>，还有的把文件名改成中文。真正能分开它们的是曲线形状：</p>
+<div class="tw"><table><thead><tr><th></th><th>Log→709 转换</th><th>风格 LUT</th></tr></thead><tbody><tr><td data-label="">中性轴中段斜率</td><td data-label="Log→709 转换">约 2.2（大幅拉开反差）</td><td data-label="风格 LUT">0.86 ~ 1.2（只微调）</td></tr><tr><td data-label="">黑位</td><td data-label="Log→709 转换">0.000</td><td data-label="风格 LUT">常抬到 0.02~0.09（胶片味）</td></tr><tr><td data-label="">色度倍率</td><td data-label="Log→709 转换">1.3 ~ 3.3（把灰片拉开）</td><td data-label="风格 LUT">0.6 ~ 1.0（反而收一点）</td></tr></tbody></table></div>
+<p>所以工具会真的把 <code>.cube</code> 读进来，取中性轴（<code>r=g=b</code> 那些点）算斜率，再和文件名交叉验证。101 个 LUT 全量分析 0.7 秒，结果缓存起来，第二次打开不重算。</p>
+<p>鼠标悬停在徽章上能看到判定理由，例如「文件名含 applelog→709；中性轴斜率 2.20，黑位 0.000」。</p>
+<blockquote><strong>文件夹名和判定不一致时信判定</strong>。<code>柯达2383</code> 这种名字看着像风格 LUT，实际是「相机 Log → 2383」的转换包，曲线斜率 2.0、色度 2.0，工具会正确判成 <code>Log 用</code>。</blockquote>
 <h4 id="关于-从列表移除">关于「从列表移除」</h4>
 <p>一个 LUT 包动辄几十上百个，常用的其实就几个。把不用的收起来，列表就清爽了。</p>
 <ul><li><strong>不会删你的文件</strong>。这里做的是「收起来」不是「删除」，<code>.cube</code> 原封不动躺在原来的文件夹里</li><li>如果被收起来的那个正挂在 ① 或 ② 槽里，<strong>会顺手把槽清空</strong>，避免出现「看不见它却还在生效」</li><li>想彻底删掉文件，用「在访达中打开」（素材文件夹那栏有这个按钮）自己删——工具不碰你的原始文件</li><li>记录存在 <code>程序/lut_hidden.json</code>，删了只丢这份清单，LUT 全部重新出现</li></ul>
-<p>LUT 名字前面有绿色 <strong>转换</strong> 或灰色 <strong>风格</strong> 标签，这是按文件名猜的（含 <code>applelog</code> <code>log2</code> <code>conversion</code> <code>torec709</code> <code>vlog</code> <code>slog</code> <code>hlg</code> 之类关键词的猜成转换型），<strong>只是提示，不影响实际处理</strong>，你可以任意组合。每行右侧还会显示它来自哪个子文件夹，LUT 包有分目录时一眼能看出来。</p>
+<p>每行右侧还会显示它来自哪个子文件夹，LUT 包有分目录时一眼能看出来。</p>
 <h3 id="③-输出设置">③ 输出设置</h3>
 <h4 id="输出格式">输出格式</h4>
 <div class="tw"><table><thead><tr><th>格式</th><th>用什么场景</th><th>体积感受</th></tr></thead><tbody><tr><td data-label="格式"><strong>ProRes 422 HQ（归档母版）</strong></td><td data-label="用什么场景">留底、以后还要再剪辑、要最高画质</td><td data-label="体积感受">极大。4K 素材 1 分钟约 1.8 GB</td></tr><tr><td data-label="格式"><strong>ProRes 422（轻量归档）</strong></td><td data-label="用什么场景">留底但想省点空间</td><td data-label="体积感受">大。约为 HQ 的 70%</td></tr><tr><td data-label="格式"><strong>HEVC 10bit（发平台）</strong></td><td data-label="用什么场景">发小红书/抖音/微信、直接看、给剪辑用</td><td data-label="体积感受">小。4K 素材 1 分钟约 300 MB</td></tr><tr><td data-label="格式"><strong>H.264 8bit（最兼容）</strong></td><td data-label="用什么场景">老设备、老播放器、某些平台上传报错时兜底</td><td data-label="体积感受">小，但会掉到 8bit</td></tr></tbody></table></div>
 <p><strong>「质量」三档只对 HEVC 和 H.264 有效</strong>（高 60 / 标准 40 / 小 20 Mbps），选 ProRes 时这一项不起作用——ProRes 是固定码率格式。</p>
 <h4 id="画幅-可多选">画幅（可多选）</h4>
-<p>素材<strong>只解码一遍</strong>，同时产出多个版本，文件名自动加画幅后缀。</p>
+<p>选几个画幅就出几个版本，文件名自动加画幅后缀。<strong>每个画幅是一次独立的解码 + 编码</strong>，所以选 4 个大约要跑 4 倍时间（裁小的画幅便宜一点），预估时长里已经算进去。</p>
 <div class="tw"><table><thead><tr><th>画幅</th><th>后缀</th><th>用途</th></tr></thead><tbody><tr><td data-label="画幅"><strong>原画幅</strong></td><td data-label="后缀">无</td><td data-label="用途">保持素材原比例</td></tr><tr><td data-label="画幅"><strong>16:9 横屏</strong></td><td data-label="后缀"><code>_16x9</code></td><td data-label="用途">B站 / YouTube</td></tr><tr><td data-label="画幅"><strong>9:16 竖屏</strong></td><td data-label="后缀"><code>_9x16</code></td><td data-label="用途">Reels / 抖音 / 视频号</td></tr><tr><td data-label="画幅"><strong>1:1 方形</strong></td><td data-label="后缀"><code>_1x1</code></td><td data-label="用途">朋友圈 / 头像位</td></tr><tr><td data-label="画幅"><strong>4:5 竖幅</strong></td><td data-label="后缀"><code>_4x5</code></td><td data-label="用途">小红书 / Instagram</td></tr></tbody></table></div>
 <p>规则：</p>
 <ul><li><strong>中心裁切</strong>——从画面正中裁，不缩放、不拉伸、不加黑边。4K 3840×2160 裁 9:16 得到 1216×2160</li><li>素材比例和目标比例一致时<strong>自动跳过裁切</strong>，不浪费画质</li><li>宽高强制取偶数，避免编码器报错</li><li>一次选 4 个画幅 = 每条素材出 4 个文件，底部状态栏会实时显示「N 条 × M 画幅 = 共几个文件」</li></ul>
@@ -160,11 +168,22 @@ tbody tr:nth-child(even){background:color-mix(in srgb,var(--line) 22%,transparen
 <p>改了任何一项，折叠标题会变成「高级参数（含画面微调改动）」，提醒你这批不是默认值。</p>
 <blockquote>微调是<strong>整批统一</strong>的，不会逐条自适应。如果这批素材曝光差别很大，先分开跑，别指望一个值救全场。</blockquote>
 <h3 id="④-运行">④ 运行</h3>
-<div class="tw"><table><thead><tr><th>元素</th><th>说明</th></tr></thead><tbody><tr><td data-label="元素">大号百分比</td><td data-label="说明">整体进度（按输出任务数算，选了多画幅时任务数 = 条数 × 画幅数）</td></tr><tr><td data-label="元素">细进度条</td><td data-label="说明">当前这一条的进度</td></tr><tr><td data-label="元素">日志区</td><td data-label="说明">每条的开始、完成、失败原因、体积、耗时，全部按时间记录</td></tr><tr><td data-label="元素"><strong>停止</strong></td><td data-label="说明"><strong>按下就停</strong>，1 秒内掐断当前 ffmpeg，不会让你等这条跑完</td></tr><tr><td data-label="元素"><strong>📄 导出报告</strong></td><td data-label="说明">跑完出现，点开在访达里定位到这次生成的 CSV 报告</td></tr><tr><td data-label="元素"><strong>📂 打开导出文件夹</strong></td><td data-label="说明">直接打开输出目录</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>元素</th><th>说明</th></tr></thead><tbody><tr><td data-label="元素">大号百分比</td><td data-label="说明">整体进度（按输出任务数算，选了多画幅时任务数 = 条数 × 画幅数）</td></tr><tr><td data-label="元素">细进度条</td><td data-label="说明">当前这一条的进度</td></tr><tr><td data-label="元素"><strong>时长那一行</strong></td><td data-label="说明">已处理多长 / 素材总长 · 剩余约多久 · 整批约多久 · 当前速度</td></tr><tr><td data-label="元素">日志区</td><td data-label="说明">每条的开始、完成、失败原因、体积、耗时，全部按时间记录</td></tr><tr><td data-label="元素"><strong>停止</strong></td><td data-label="说明"><strong>按下就停</strong>，1 秒内掐断当前 ffmpeg，不会让你等这条跑完</td></tr><tr><td data-label="元素"><strong>📄 导出报告</strong></td><td data-label="说明">跑完出现，点开在访达里定位到这次生成的 CSV 报告</td></tr><tr><td data-label="元素"><strong>📂 打开导出文件夹</strong></td><td data-label="说明">直接打开输出目录</td></tr></tbody></table></div>
 <p>失败的条目会单独标红并写明原因，其它条目继续跑，不会因为一条出错整批停下。跑完后状态栏还会汇总失败条数，鼠标悬停能看具体原因。</p>
+<h4 id="要跑多久-还剩多久">要跑多久 / 还剩多久</h4>
+<p><strong>开始之前</strong>底部状态栏和运行面板就会给结论：</p>
+<pre class="code"><code>素材总长 18:40    整批预计需要 约 8 分钟（估）    待处理 40 / 跳过 3 个文件</code></pre>
+<p>这个数字是在你这台机器上实测标定出来的，不是拍脑袋的常数：</p>
+<div class="tw"><table><thead><tr><th>输出尺寸</th><th>HEVC</th><th>H.264</th><th>ProRes 422</th></tr></thead><tbody><tr><td data-label="输出尺寸">3840×2160</td><td data-label="HEVC">0.89x</td><td data-label="H.264">0.93x</td><td data-label="ProRes 422">0.31x</td></tr><tr><td data-label="输出尺寸">1920×1080</td><td data-label="HEVC">3.16x</td><td data-label="H.264">3.47x</td><td data-label="ProRes 422">—</td></tr></tbody></table></div>
+<p>（0.89x = 一秒钟能处理 0.89 秒素材，也就是比实时略慢）</p>
+<p>工具按<strong>输出像素数</strong>反推，所以裁成竖屏之后像素变少、速度变快也能算进去；LUT 级数、强度混合、质量档位都会往下打折。</p>
+<p><strong>跑起来之后</strong>以实测为准，每 0.4 秒刷新：</p>
+<pre class="code"><code>已处理 05:20 / 18:40    剩余 约 02:10    整批 约 07:30    速度 3.34x</code></pre>
+<ul><li>剩余时长 = 还没处理的素材长度 ÷ 当前实测速度</li><li>每条跑完用实际时长校准，误差不累积</li><li>跳过 / 失败的文件也算进「已处理」，否则跑完了剩余时长还挂在非零</li><li>结束后显示「整批实际用时」</li></ul>
+<blockquote>预估和实际通常差在 10% 以内。差得多说明这批素材的编码比标定时更重（比如 4:2:2 10bit 的 HEVC 源，解码比 ProRes 更吃 CPU），但它会在头几秒内自我校正，看「剩余」那个数就行。</blockquote>
 <h4 id="点-开始批量导出-之后-什么情况下会先弹一个框">点「开始批量导出」之后，什么情况下会先弹一个框</h4>
 <p>三种情况会先问一句（不是拦你，是提醒）：</p>
-<div class="tw"><table><thead><tr><th>情况</th><th>提示</th><th>为什么</th></tr></thead><tbody><tr><td data-label="情况">导出目录 == 素材目录</td><td data-label="提示">导出目录和素材目录是同一个</td><td data-label="为什么">输出会和原片混在一起，下次扫描还会把输出当成素材扫进来</td></tr><tr><td data-label="情况">一个 LUT 都没选</td><td data-label="提示">一个 LUT 都没选</td><td data-label="为什么">这样只做色彩标签修正，画面没有任何调色变化</td></tr><tr><td data-label="情况">输出文件 &gt; 40 个</td><td data-label="提示">要生成 N 个文件</td><td data-label="为什么">防止手滑一次跑出几百个文件</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>情况</th><th>提示</th><th>为什么</th></tr></thead><tbody><tr><td data-label="情况">导出目录 == 素材目录</td><td data-label="提示">导出目录和素材目录是同一个</td><td data-label="为什么">输出会和原片混在一起，下次扫描还会把输出当成素材扫进来</td></tr><tr><td data-label="情况">一个 LUT 都没选</td><td data-label="提示">一个 LUT 都没选</td><td data-label="为什么">这样只做色彩标签修正，画面没有任何调色变化</td></tr><tr><td data-label="情况">输出文件 &gt; 40 个</td><td data-label="提示">要生成 N 个文件（附预计时长）</td><td data-label="为什么">防止手滑一次跑出几百个文件</td></tr></tbody></table></div>
 <p>弹窗里 <strong>ESC / 点遮罩 = 取消</strong>，<strong>回车 = 确认</strong>。</p>
 <blockquote>这几个框是自己画的，不用系统自带弹窗。早先版本用的是浏览器 <code>confirm()</code>，而原生窗口（WKWebView）默认不实现它、会<strong>静默返回「取消」</strong>——表现就是点「开始导出」毫无反应。v1.4 改成自绘，app 和浏览器里行为完全一致。</blockquote>
 <h4 id="关于-停止">关于「停止」</h4>
@@ -198,10 +217,12 @@ tbody tr:nth-child(even){background:color-mix(in srgb,var(--line) 22%,transparen
 <p>能原样拷贝就原样拷贝，不重新压缩。唯一例外：ProRes 素材的音频是 PCM 无压缩格式，导成 <code>.mp4</code> 容器塞不进去，会自动转成 AAC 256k。导成 <code>.mov</code> 则始终原样保留。选了「单声道 / 静音 / 响度标准化」就按你的选择来。</p>
 <hr>
 <h2 id="性能参考">性能参考</h2>
-<p>本机实测（MacBook Air M3，8 核，macOS 15.8，两条 LUT 串联）：</p>
-<div class="tw"><table><thead><tr><th>素材</th><th>输出</th><th>速度</th><th>换算</th></tr></thead><tbody><tr><td data-label="素材">4K 30p</td><td data-label="输出">HEVC 10bit 40M</td><td data-label="速度">约 0.5× 实时</td><td data-label="换算"><strong>10 分钟素材 ≈ 20 分钟</strong></td></tr><tr><td data-label="素材">4K 30p</td><td data-label="输出">ProRes 422</td><td data-label="速度">约 0.3× 实时</td><td data-label="换算">10 分钟素材 ≈ 35 分钟</td></tr><tr><td data-label="素材">1080p 30p</td><td data-label="输出">HEVC 10bit</td><td data-label="速度">约 1.8× 实时</td><td data-label="换算">10 分钟素材 ≈ 6 分钟</td></tr></tbody></table></div>
-<p><strong>为什么这么慢？</strong> 三维 LUT 的逐像素查找是纯 CPU 计算，4K 一个画面 830 万像素，每一帧都要过一遍查找表。ffmpeg 这个环节没有 GPU 加速。这是真实速度，不是工具的问题——Resolve 里批量渲染同样的活儿，时间也是同一个量级。</p>
-<p><strong>多画幅会变慢吗？</strong> 不会成倍变慢。素材只解码一遍，编码次数按画幅数增加，总体大约是单画幅的 1.4–1.8 倍（4 个画幅），远低于跑 4 次。</p>
+<p>本机实测（MacBook Air M3，macOS 15.8，<strong>1 级 LUT</strong>，40 Mbps，ProRes 源，输出原画幅）：</p>
+<div class="tw"><table><thead><tr><th>输出尺寸</th><th>HEVC 10bit</th><th>H.264 8bit</th><th>ProRes 422</th></tr></thead><tbody><tr><td data-label="输出尺寸">3840×2160</td><td data-label="HEVC 10bit"><strong>0.89× 实时</strong>（10 分钟素材 ≈ 11 分钟）</td><td data-label="H.264 8bit">0.93×（≈ 11 分钟）</td><td data-label="ProRes 422">0.31×（≈ 32 分钟）</td></tr><tr><td data-label="输出尺寸">1920×1080</td><td data-label="HEVC 10bit"><strong>3.16× 实时</strong>（10 分钟素材 ≈ 3 分钟）</td><td data-label="H.264 8bit">3.47×（≈ 3 分钟）</td><td data-label="ProRes 422">—</td></tr></tbody></table></div>
+<p><strong>为什么 4K 这么慢？</strong> 三维 LUT 的逐像素查找是纯 CPU 计算，4K 一帧 830 万像素，每一帧都要过一遍查找表。ffmpeg 这个环节没有 GPU 加速。这是真实速度，不是工具的问题——Resolve 里批量渲染同样的活儿，时间也是同一个量级。</p>
+<p><strong>多一级 LUT 会再慢一点</strong>：每多一级 <code>lut3d</code> 大约多一成 CPU 开销（强度不满 100% 时还要多算一遍混合，约慢三成）。预估时长里已经按这个折算过。</p>
+<p><strong>多画幅是几乎成倍的</strong>：每个画幅是一次独立的解码 + 编码，实测 4 个画幅的耗时是 1 个画幅的 <strong>3.75 倍</strong>（裁小的画幅像素少、便宜一点，所以不到 4 倍）。选了 4 个画幅，预估时长也会按 4 份算。</p>
+<blockquote>早先版本说「素材只解码一遍、多画幅只慢 1.4~1.8 倍」，这是错的，已更正——那种做法要在一个 ffmpeg 里挂多个输出，当前实现是每个画幅单独跑一遍。</blockquote>
 <p><strong>实操建议</strong>：晚上丢进去跑，或者先去干别的。批量 30 条 4K 短片（每条 20 秒）大约 40 分钟。</p>
 <p><strong>想让速度快一点</strong>：如果只是发小红书/抖音，可以在 Blackmagic Camera 里拍 1080p 或 4K 但降低帧率，处理时间直接减一大截。</p>
 <hr>
@@ -234,7 +255,7 @@ tbody tr:nth-child(even){background:color-mix(in srgb,var(--line) 22%,transparen
 <p><strong>Q：为什么我的素材目录里多了一堆 <code>_LUT</code> 后缀的文件？</strong> A：那是<strong>导出结果</strong>，不是原片。如果你把「导出位置」设成了素材目录（或者留空），输出和原片就会混在一起。建议把导出目录单独指定一个文件夹。混在一起也不影响使用，但下次扫描会把它们也当素材扫进来。</p>
 <hr>
 <h2 id="数据安全与免责">数据安全与免责</h2>
-<ul><li><strong>全程本地处理</strong>。不联网、不上传、不遥测、不需要账号。工具只监听本机回环地址 <code>127.0.0.1</code>，同一个 Wi-Fi 下的其它设备也访问不到。</li><li><strong>不修改原始素材</strong>。只读打开，只写新文件。</li><li><strong>唯一的网络行为</strong>是启动时在浏览器打开本地地址，仅此。</li><li>工具会记住上次用的文件夹和设置，存在 <code>程序/config.json</code>；收藏的 LUT 存在 <code>程序/lut_fav.json</code>。都是纯本地文本，随时可以删（删了就是恢复默认）。</li><li>运行日志、试色板临时图、素材信息缓存都存在 <code>运行记录/</code> 目录里，可以随时清空，不影响功能。</li><li>这不是商业产品，没有付费、没有激活、没有后门。代码全部是纯文本，<code>程序/server.py</code> 和 <code>程序/static/index.html</code>，你随时可以让任何一个懂 Python 的人逐行检查。</li><li>唯一的外部依赖是 ffmpeg（开源，GPL/LGPL）和 macOS 自带的 Python 3。</li></ul>
+<ul><li><strong>全程本地处理</strong>。不联网、不上传、不遥测、不需要账号。工具只监听本机回环地址 <code>127.0.0.1</code>，同一个 Wi-Fi 下的其它设备也访问不到。</li><li><strong>不修改原始素材</strong>。只读打开，只写新文件。</li><li><strong>唯一的网络行为</strong>是启动时在浏览器打开本地地址，仅此。</li><li>工具会记住上次用的文件夹和设置，存在 <code>程序/config.json</code>；收藏的 LUT 存在 <code>程序/lut_fav.json</code>；LUT 用途的判定结果缓存在 <code>程序/lut_meta.json</code>。都是纯本地文本，随时可以删（删了就是恢复默认 / 重新分析一遍）。</li><li>运行日志、试色板临时图、素材信息缓存都存在 <code>运行记录/</code> 目录里，可以随时清空，不影响功能。</li><li>这不是商业产品，没有付费、没有激活、没有后门。代码全部是纯文本，<code>程序/server.py</code>、<code>程序/lut_analyze.py</code> 和 <code>程序/static/index.html</code>，你随时可以让任何一个懂 Python 的人逐行检查。</li><li>唯一的外部依赖是 ffmpeg（开源，GPL/LGPL）和 macOS 自带的 Python 3。</li></ul>
 <hr>
 <h2 id="目录里都有什么">目录里都有什么</h2>
 <p>日常使用只需要碰前三项：</p>

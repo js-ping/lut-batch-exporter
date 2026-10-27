@@ -13,6 +13,7 @@ __pycache__/
 程序/config.json
 程序/lut_fav.json
 程序/lut_hidden.json
+程序/lut_meta.json
 
 # 编译中间产物
 /tmp/LUTBatch_build

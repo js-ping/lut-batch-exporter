@@ -135,8 +135,20 @@ select{font-family:-apple-system,sans-serif;font-size:12.5px;cursor:pointer}
 .lutgroup{font-size:10px;color:var(--dim2);flex:none;max-width:110px;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
 .tag{font-size:9.5px;padding:2px 5px;border-radius:4px;flex:none;letter-spacing:.3px}
-.tag.convert{background:rgba(92,191,139,.14);color:var(--ok)}
-.tag.look{background:#1c2129;color:var(--dim2)}
+/* domain：这个 LUT 该喂什么素材（曲线实测 + 文件名交叉判断） */
+.tag.log{background:rgba(224,163,92,.16);color:#f0b878;border:1px solid rgba(224,163,92,.32)}
+.tag.rec{background:rgba(92,191,139,.14);color:var(--ok);border:1px solid rgba(92,191,139,.26)}
+.tag.mid{background:#1c2129;color:var(--dim2);border:1px solid #2a323d}
+/* 判不准的斜体虚线，一眼看出是猜的 */
+.tag.mid.dim{opacity:.62;border-style:dashed}
+.domseg{display:flex;gap:0;border:1px solid var(--line2);border-radius:7px;overflow:hidden;flex:none}
+.domseg button{background:#0f1319;border:none;border-right:1px solid var(--line2);color:var(--dim2);
+  font:11px/1 inherit;padding:5px 9px;cursor:pointer;white-space:nowrap}
+.domseg button:last-child{border-right:none}
+.domseg button:hover{color:var(--txt);background:#151a21}
+.domseg button.on{background:rgba(224,163,92,.18);color:#f0b878}
+.domseg button:disabled{opacity:.42;cursor:default}
+.domseg button b{font-family:var(--mono);font-weight:600;margin-left:3px}
 .star{width:18px;height:18px;flex:none;background:none;border:none;cursor:pointer;
   color:#3a424e;font-size:13px;line-height:1;padding:0;transition:.12s}
 .star:hover{color:var(--acc)}
@@ -249,6 +261,16 @@ input[type=range]{width:100%;accent-color:var(--acc);height:4px;cursor:pointer}
   box-shadow:0 0 12px rgba(224,163,92,.5);transition:width .35s ease}
 .bar .sub{position:absolute;inset:0;width:0;background:rgba(255,255,255,.22);transition:width .2s}
 
+/* 时间账：已处理 / 素材总长 / 剩余 / 整批预计 */
+.tline{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;font:11px/1.5 var(--mono);color:var(--dim2)}
+.tline .t{display:inline-flex;align-items:center;gap:5px;background:#12161d;border:1px solid var(--line);
+  border-radius:6px;padding:3px 8px;white-space:nowrap}
+.tline .t b{color:var(--txt);font-weight:600}
+.tline .t.hot{border-color:rgba(224,163,92,.45);background:rgba(224,163,92,.09)}
+.tline .t.hot b{color:#f0b878}
+.tline .t.ok{border-color:rgba(92,191,139,.35);background:rgba(92,191,139,.08)}
+.tline .t.ok b{color:#7fd6a8}
+
 /* ---------- log ---------- */
 .log{margin-top:12px;background:#080a0d;border:1px solid var(--line);border-radius:10px;
   max-height:260px;overflow:auto;padding:10px 12px;font:11.5px/1.65 var(--mono);display:none}
@@ -350,6 +372,17 @@ input[type=range]{width:100%;accent-color:var(--acc);height:4px;cursor:pointer}
       <button class="btn ghost sm" id="favToggle" onclick="toggleFavOnly()">★ 只看收藏</button>
       <button class="btn ghost sm" onclick="scanLut()">刷新</button>
     </div>
+    <div class="row" style="margin-top:8px;gap:9px;align-items:center">
+      <div class="domseg" id="domSeg">
+        <button data-d="all" class="on" onclick="setDomFilter('all')">全部 <b>0</b></button>
+        <button data-d="log" onclick="setDomFilter('log')">Log 用 <b>0</b></button>
+        <button data-d="709" onclick="setDomFilter('709')">709 用 <b>0</b></button>
+        <button data-d="unknown" onclick="setDomFilter('unknown')">判不准 <b>0</b></button>
+      </div>
+      <span style="font-size:10.5px;color:var(--dim2);flex:1;min-width:0" id="domHint">
+        按曲线形状判断：这个 LUT 该喂给 Log 灰片，还是已经还原的画面
+      </span>
+    </div>
 
     <div class="slot" id="slot1"><span class="k">①</span><span class="v ph">转换 LUT（Apple Log 2 → Rec.709），点列表里的 ① 填入</span><span class="x" onclick="clearSlot(1)">×</span></div>
     <div class="slot" id="slot2"><span class="k">②</span><span class="v ph">风格 LUT（叠在上面），点列表里的 ② 填入</span><span class="x" onclick="clearSlot(2)">×</span></div>
@@ -379,7 +412,7 @@ input[type=range]{width:100%;accent-color:var(--acc);height:4px;cursor:pointer}
     <h2><span class="num">3</span>输出设置<span class="hint">决定画质、画幅和体积</span></h2>
     <div class="fmts" id="fmts"></div>
 
-    <div class="subh">画幅（可多选，素材只解码一遍，同时出多个版本）</div>
+    <div class="subh">画幅（可多选，每个画幅各出一版，时长会按倍数算进预估）</div>
     <div class="picks" id="aspects"></div>
 
     <div class="row" style="margin-top:14px">
@@ -436,9 +469,9 @@ input[type=range]{width:100%;accent-color:var(--acc);height:4px;cursor:pointer}
 
         <div class="field">
           <label>文件名后缀</label>
-          <input type="text" id="suffix" value="_LUT" placeholder="可留空">
+          <input type="text" id="suffix" value="_LUT" placeholder="可留空" oninput="reqEstimate()">
         </div>
-        <label class="check"><input type="checkbox" id="skipExist" checked> 跳过已存在的输出文件（可断点续跑）</label>
+        <label class="check"><input type="checkbox" id="skipExist" checked onchange="reqEstimate()"> 跳过已存在的输出文件（可断点续跑）</label>
       </div>
     </details>
   </section>
@@ -453,6 +486,7 @@ input[type=range]{width:100%;accent-color:var(--acc);height:4px;cursor:pointer}
         <div class="stat" id="stat"></div>
       </div>
       <div class="bar"><div class="sub" id="barSub"></div><div class="fill" id="barFill"></div></div>
+      <div class="tline" id="tline"></div>
     </div>
     <div class="log on" id="log"><div style="color:#4c5563">日志会在这里逐条滚动显示…</div></div>
     <div class="meta" id="runMeta"></div>
@@ -477,8 +511,10 @@ input[type=range]{width:100%;accent-color:var(--acc);height:4px;cursor:pointer}
   <div class="action-in">
     <div class="sumbar">
       <span>素材 <b id="sumFiles">0</b> 条</span>
+      <span>总长 <b id="sumDur">—</b></span>
       <span>输出 <b id="sumTasks">0</b> 个文件</span>
-      <span>预计 <b id="sumSize">—</b></span>
+      <span>体积 <b id="sumSize">—</b></span>
+      <span>耗时 <b id="sumTime">—</b></span>
       <span id="sumLut" class="warn"></span>
     </div>
     <div class="right">
@@ -496,7 +532,7 @@ const S = {
   fmt:'hevc', quality:'normal', matrix:'auto', checked:new Set(), polling:null,
   aspects:new Set(['source']), audioMode:'keep', fav:new Set(), recent:[],
   favOnly:false, logInfo:null, logOverride:'auto', filterRecent:false,
-  builtin:[], hidden:new Set(),
+  builtin:[], hidden:new Set(), domFilter:'all', est:null,
   // 勾选交互：anchor = Shift 范围选择的锚点；paint* = 鼠标拖动刷选
   anchor:null, painting:false, paintOn:true, paintTouched:null,
   grade:{exposure:0, contrast:1, saturation:1, temperature:0}
@@ -756,6 +792,10 @@ function pickConvertLut(logType){
     if(/torec709|to709|rec709|rec\.709|conversion|convert|transform|cst|torec/.test(n)) sc+=5;
     if(/technical|input/.test(n)) sc+=2;
     if(l.guess==='convert') sc+=2;
+    // 曲线判定比文件名靠得住：明显是「709 用」的压下去，别把风格 LUT 当转换用
+    const dom = domOf(l);
+    if(dom==='log') sc+=6;
+    else if(dom==='709') sc-=9;
     if(S.fav.has(l.path)) sc+=1;
     return sc;
   };
@@ -837,7 +877,55 @@ function visibleLuts(){
   list = list.filter(l=>!S.hidden.has(l.path));
   if(S.favOnly) list = list.filter(l=>S.fav.has(l.path));
   if(S.filterRecent) list = list.filter(l=>S.recent.includes(l.path));
+  if(S.domFilter && S.domFilter!=='all') list = list.filter(l=>(l.domain||'unknown')===S.domFilter);
   return list;
+}
+
+/* ---------- LUT 用途辨别：这个 LUT 该喂 Log 还是喂已还原画面 ---------- */
+const DOM_STYLE = {
+  log:     {tag:'log', text:'Log 用'},
+  '709':   {tag:'rec', text:'709 用'},
+  unknown: {tag:'mid', text:'判不准'},
+};
+function domOf(l){ return DOM_STYLE[l.domain] ? l.domain : 'unknown' }
+function domBadge(l){
+  const d = domOf(l), m = DOM_STYLE[d];
+  const dim = l.domain_conf==='none' ? ' dim' : '';
+  const tip = [
+    l.domain_reason || '',
+    l.slope!=null ? '中性轴中段斜率 '+Number(l.slope).toFixed(2) : '',
+    l.black!=null ? '黑位 '+Number(l.black).toFixed(3) : '',
+  ].filter(Boolean).join('\n');
+  return `<span class="tag ${m.tag}${dim}" title="${esc(tip)}">${m.text}</span>`;
+}
+function setDomFilter(d){
+  S.domFilter = d;
+  renderLuts();
+}
+function renderDomSeg(){
+  const seg = $('domSeg'); if(!seg) return;
+  const cnt = {all:S.luts.filter(l=>!S.hidden.has(l.path)).length, log:0, '709':0, unknown:0};
+  for(const l of S.luts){
+    if(S.hidden.has(l.path)) continue;
+    cnt[domOf(l)] = (cnt[domOf(l)]||0)+1;
+  }
+  seg.querySelectorAll('button').forEach(b=>{
+    const d=b.dataset.d;
+    b.classList.toggle('on', (S.domFilter||'all')===d);
+    const n=b.querySelector('b'); if(n) n.textContent = cnt[d]||0;
+    b.disabled = !S.luts.length;
+  });
+  // 素材是灰片时，把「Log 用」标出来 —— 那才是这批该用的
+  const hint=$('domHint');
+  if(hint){
+    const t = effectiveLogType();
+    if(!S.luts.length) hint.textContent='按曲线形状判断：这个 LUT 该喂给 Log 灰片，还是已经还原的画面';
+    else if(isLogType(t) && cnt.log)
+      hint.innerHTML = `<b style="color:#f0b878">这批素材是灰片</b> → 优先挑「Log 用」的（${cnt.log} 个），其余直接套会发灰发脏`;
+    else if(cnt.unknown)
+      hint.innerHTML = `${cnt.unknown} 个判不准：曲线特征不明显，先用试色板看一眼再决定`;
+    else hint.textContent='按曲线形状判断：这个 LUT 该喂给 Log 灰片，还是已经还原的画面';
+  }
 }
 function renderLuts(){
   const list = visibleLuts();
@@ -845,9 +933,11 @@ function renderLuts(){
   const hidN = S.hidden.size;
   const parts=[];
   parts.push(total ? (list.length===total? `${total} 个 LUT` : `显示 ${list.length} / ${total}`) : '尚未加载 LUT');
+  if(S.domFilter && S.domFilter!=='all') parts.push(DOM_STYLE[S.domFilter].text);
   if(S.favOnly) parts.push('★ 只看收藏');
   if(S.filterRecent) parts.push('最近用过');
   $('lutCount').textContent = parts.join(' · ');
+  renderDomSeg();
   const hb = $('lutHidden');
   if(hb){
     if(hidN){ hb.style.display='inline-block'; hb.textContent = `已隐藏 ${hidN} · 恢复` }
@@ -868,7 +958,7 @@ function renderLuts(){
     return `<div class="lutrow ${is1?'sel1':''} ${is2?'sel2':''} ${ck?'ckd':''}">
       <input type="checkbox" data-p="${encodeURIComponent(l.path)}" ${ck?'checked':''}>
       <button class="star ${starred?'on':''}" data-fav="${encodeURIComponent(l.path)}" title="收藏">${starred?'★':'☆'}</button>
-      <span class="tag ${l.guess}">${l.guess==='convert'?'转换':'风格'}</span>
+      ${domBadge(l)}
       <span class="lutname" title="${esc(l.rel)}">${esc(l.name)}</span>
       ${l.group && l.group!=='.' ? `<span class="lutgroup">${esc(l.group)}</span>`:''}
       <button class="slotbtn ${is1?'on1':''}" title="设为转换 LUT" data-slot="1" data-p="${encodeURIComponent(l.path)}">①</button>
@@ -1180,6 +1270,86 @@ function updateSum(){
       `<span class="chip">预计输出 <b>${human(e.total)}</b></span>`+
       (S.fmt.startsWith('prores')?`<span class="chip warn">ProRes 体积大，注意磁盘空间</span>`:'')
     : '';
+  reqEstimate();          // 时长预估跟着设置走，改动任何一项都会重算
+}
+
+/* ---------------- 时长预估 / 剩余时长 ---------------- */
+let _estTimer=null, _estSeq=0;
+function reqEstimate(){
+  clearTimeout(_estTimer);
+  _estTimer=setTimeout(doEstimate, 220);
+}
+function estPayload(){
+  return {
+    input_dir: $('inDir').value.trim(),
+    output_dir: $('outDir').value.trim(),
+    format: S.fmt, quality: S.quality, aspects: [...S.aspects],
+    suffix: $('suffix').value, skip_existing: $('skipExist').checked,
+    luts: [S.slots[1],S.slots[2]].filter(Boolean),
+    intensity: (+$('intensity').value)/100
+  };
+}
+async function doEstimate(){
+  const dir=$('inDir').value.trim();
+  if(!dir || !S.files.length){
+    S.est=null;
+    if($('sumDur')) $('sumDur').textContent='—';
+    if($('sumTime')) $('sumTime').textContent='—';
+    paintTime(null); return;
+  }
+  try{
+    const seq = ++_estSeq;
+    const r = await api('/api/estimate', estPayload());
+    if(seq !== _estSeq) return;      // 又改设置了，这次结果已经过期，丢掉
+    S.est = r;
+    if($('sumDur'))  $('sumDur').textContent  = r.media_sec? fmtDur(r.media_sec) : '—';
+    if($('sumTime')) $('sumTime').textContent = r.est_sec? friendlyDur(r.est_sec)+'（估）' : '—';
+    paintTime(null);
+  }catch(e){ /* 预估失败不影响正常导出 */ }
+}
+function friendlyDur(s){
+  s = Math.max(0, Math.round(s||0));
+  if(s < 45) return s+' 秒';
+  if(s < 90) return '约 1 分钟';
+  const m = Math.round(s/60);
+  if(m < 60) return '约 '+m+' 分钟';
+  const h = Math.floor(m/60), mm = m%60;
+  return '约 '+h+' 小时'+(mm? ' '+mm+' 分':'');
+}
+function tchip(label, val, cls){
+  return `<span class="t ${cls||''}">${label}${val!=null?` <b>${val}</b>`:''}</span>`;
+}
+function paintTime(j){
+  const el=$('tline'); if(!el) return;
+  const out=[];
+  const running = j && j.running;
+  const ended = j && j.finished_at;
+
+  if(running){
+    if(j.total_sec>0){
+      out.push(tchip('已处理', `${fmtDur(j.done_sec)} <span style="color:var(--dim2)">/ ${fmtDur(j.total_sec)}</span>`));
+    }else if(!j.done){
+      out.push(tchip('正在统计整批素材总长…', ''));
+    }
+    if(j.eta_sec>=0){
+      out.push(tchip('剩余', '约 '+fmtDur(j.eta_sec), 'hot'));
+    }else if(j.start_est_sec>0){
+      out.push(tchip('预计', '约 '+fmtDur(j.start_est_sec)));
+    }
+    if(j.est_sec>0) out.push(tchip('整批', '约 '+fmtDur(j.est_sec)));
+    if(j.speed_num>0) out.push(tchip('速度', j.speed_num.toFixed(2)+'x'));
+    else if(j.speed) out.push(tchip('速度', j.speed));
+  }else if(ended){
+    if(j.est_sec>0) out.push(tchip('整批实际用时', fmtDur(j.est_sec), 'ok'));
+    if(j.total_sec>0) out.push(tchip('处理素材', fmtDur(j.done_sec)+' / '+fmtDur(j.total_sec)));
+  }else if(S.est){
+    const e=S.est;
+    out.push(tchip('素材总长', fmtDur(e.media_sec)));
+    if(e.est_sec>0) out.push(tchip('整批预计需要', friendlyDur(e.est_sec)+'（估）', 'hot'));
+    out.push(tchip('待处理', e.todo+(e.skip?` / 跳过 ${e.skip}`:'')+' 个文件'));
+  }
+  el.innerHTML = out.join('');
+  el.style.display = out.length? 'flex':'none';
 }
 
 /* 灰片却没挂转换 LUT —— 这是最容易出废片的地方，必须拦住 */
@@ -1189,7 +1359,7 @@ function checkConvWarn(){
   if(!box) return;
   const t=effectiveLogType();
   if(!S.files.length || !isLogType(t) || S.slots[1]){ box.classList.remove('on'); return }
-  const hasConv = S.luts.some(l=>l.guess==='convert');
+  const hasConv = S.luts.some(l=>domOf(l)==='log' || (l.domain!=='709' && l.guess==='convert'));
   const hasBuiltin = (S.builtin||[]).length>0;
   const name = (S.logInfo && S.logInfo.label) || 'Log';
   let msg = `<b>这批素材是 ${esc(name)} 灰片，但 ① 槽还没放转换 LUT。</b><br>`+
@@ -1279,9 +1449,11 @@ async function startJob(){
     if(!go) return;
   }
   const n = S.files.length*S.aspects.size;
+  const estTxt = (S.est && S.est.est_sec>0)
+    ? `\n素材总长 ${fmtDur(S.est.media_sec)}，预计需要 ${friendlyDur(S.est.est_sec)}。` : '';
   if(n>40){
     const go = await askModal('要生成 '+n+' 个文件',
-      '素材 ' + S.files.length + ' 条 × 画幅 ' + S.aspects.size + ' 种 = ' + n + ' 个文件。\n\n确认开始？',
+      '素材 ' + S.files.length + ' 条 × 画幅 ' + S.aspects.size + ' 种 = ' + n + ' 个文件。'+estTxt+'\n\n确认开始？',
       '开始', '再想想');
     if(!go) return;
   }
@@ -1336,12 +1508,13 @@ function renderJob(j){
   $('pct').textContent = (j.percent||0).toFixed(j.percent>9?0:1)+'%';
   $('cur').textContent = j.current || '等待开始';
   const parts=[];
-  if(j.total) parts.push(`${j.done}/${j.total}`);
-  if(j.speed) parts.push(j.speed);
-  if(j.eta) parts.push('剩 '+j.eta);
+  if(j.total) parts.push(`${j.done}/${j.total} 文件`);
+  if(j.failed) parts.push(`失败 ${j.failed}`);
+  if(j.skipped) parts.push(`跳过 ${j.skipped}`);
   $('stat').textContent=parts.join('  ·  ');
   $('barFill').style.width=(j.percent||0)+'%';
   $('barSub').style.width=(j.file_percent||0)+'%';
+  paintTime(j);
   renderLog(j.log);
 }
 let _logN = 0;

@@ -124,7 +124,8 @@ def main():
         html = open(static, encoding="utf-8").read()
         need = {"画幅多选": "aspects", "音频模式": "audio_mode", "画面微调": "gExposure",
                 "逐条体检": "renderFileList", "Log 识别框": "renderLogBox",
-                "收藏": "lutfav", "灰片拦截提示": "checkConvWarn"}
+                "收藏": "lutfav", "灰片拦截提示": "checkConvWarn",
+                "LUT 用途筛选": "setDomFilter", "时长预估": "paintTime"}
         miss = [k for k, v in need.items() if v not in html]
         if miss:
             bad("界面缺少功能模块", "、".join(miss))
@@ -569,6 +570,146 @@ def main():
                 bad(fname + " 中间灰点异常", "%s 通道差 %.1e" % (vals, spread))
     except Exception as e:
         bad("内置还原曲线检查", str(e))
+
+    # ---------- 14 LUT 用途辨别 ----------
+    section("14. LUT 用途辨别（这个 LUT 该喂 Log 还是喂已还原画面）")
+    try:
+        import lut_analyze as LA
+
+        # ① 带空行 + 注释的文件要能正常读（真实 LUT 包最常见的样子）
+        sig = LA.read_cube_signature(lut1)
+        if sig and sig.get("mid_slope"):
+            ok("能读出曲线（含空行的 .cube）：斜率 %.2f，黑位 %.3f" % (sig["mid_slope"], sig["black"]))
+        else:
+            bad("读不出曲线特征", "带空行的 .cube 解析失败")
+
+        # ② 三种典型形状：恒等 / 抬黑位 / 大反差 Log 转换
+        def synth(path, mode, n=17):
+            rows = ['TITLE "selftest"', "LUT_3D_SIZE %d" % n, ""]
+            for b in range(n):
+                for g in range(n):
+                    for r in range(n):
+                        v = [r / (n - 1.0), g / (n - 1.0), b / (n - 1.0)]
+                        if mode == "lift":                 # 抬黑位的胶片味：斜率不变，黑位起来
+                            v = [0.06 + 0.90 * c for c in v]
+                        elif mode == "big":                # 大反差：黑位到 0，中段斜率 >1.8
+                            v = [max(0.0, min(1.0, (c - 0.12) * 2.2)) for c in v]
+                        rows.append("%.6f %.6f %.6f" % tuple(v))
+            with open(path, "w") as f:
+                f.write("\n".join(rows) + "\n")
+
+        cases = [("ident", "709", LA.DOMAIN_META["709"]["label"]),
+                 ("lift", "709", "抬黑位"),
+                 ("big", "log", "大反差")]
+        for mode, want, why in cases:
+            p = os.path.join(tmp, "pick_%s.cube" % mode)
+            synth(p, mode)
+            got = LA.classify(LA.read_cube_signature(p), "SOME_LOOK_%s" % mode)["domain"]
+            if got == want:
+                ok("曲线判定 %-6s → %-4s（%s）" % (mode, want, why))
+            else:
+                bad("曲线判定 %s" % mode, "判成 %s，应为 %s" % (got, want))
+
+        # ③ 文件名规则：「Log→709」这种两个方向都沾的名字，输入一定是 Log
+        name_cases = [
+            ("AppleLog2_to_Rec709.cube", "log"),
+            ("ARRI_LogC_to_Rec709.cube", "log"),
+            ("SLog3_Rec709_v2.cube", "log"),
+            ("Kodak_2383_Rec709.cube", "709"),
+            ("随拍风格_02.cube", None),
+        ]
+        wrong = []
+        for fn, want in name_cases:
+            got, _tok = LA._filename_hint(fn)
+            if got != want:
+                wrong.append("%s→%s(期望 %s)" % (fn, got, want))
+        if not wrong:
+            ok("文件名规则 %d 例全对（Log→709 判成 Log 输入）" % len(name_cases))
+        else:
+            bad("文件名规则有误", "；".join(wrong))
+
+        # ④ 一维整形表 + 三维表 的写法（达芬奇导出常见）
+        p13 = os.path.join(tmp, "pick_1d3d.cube")
+        with open(p13, "w") as f:
+            f.write('TITLE "1d+3d"\nLUT_1D_SIZE 17\nLUT_3D_SIZE 3\n\n')
+            for i in range(17):
+                v = i / 16.0
+                f.write("%.6f %.6f %.6f\n" % (v, v, v))
+            for b in range(3):
+                for g in range(3):
+                    for r in range(3):
+                        f.write("%.6f %.6f %.6f\n" % (r / 2.0, g / 2.0, b / 2.0))
+        s13 = LA.read_cube_signature(p13)
+        if s13 and s13.get("shaper") and abs(s13["mid_slope"] - 1.0) < 0.15:
+            ok("一维整形表 + 三维表解析正常（斜率 %.2f）" % s13["mid_slope"])
+        else:
+            bad("一维 + 三维混合 LUT 解析失败", str(s13))
+
+        # ⑤ 接进接口后字段齐全
+        metas = S.list_luts(tmp)
+        miss = [l["name"] for l in metas if l.get("domain") not in ("log", "709", "unknown")
+                or "domain_reason" not in l]
+        if not miss:
+            ok("%d 个 LUT 都带用途结论与判定理由" % len(metas))
+        else:
+            bad("LUT 用途字段缺失", str(miss)[:150])
+    except Exception as e:
+        bad("LUT 用途辨别测试", str(e))
+
+    # ---------- 15 时长预估 ----------
+    section("15. 时长预估（需要多久 / 还剩多久）")
+    try:
+        for (w, h, fmt, lo, hi) in ((1920, 1080, "hevc", 2.4, 4.6),
+                                    (3840, 2160, "hevc", 0.6, 1.3),
+                                    (3840, 2160, "prores", 0.15, 0.55)):
+            sp = S.est_speed(w, h, fmt)
+            if lo <= sp <= hi:
+                ok("%s %dx%d 预估 %.2fx（实测标定区间 %.1f~%.1f）" % (fmt, w, h, sp, lo, hi))
+            else:
+                bad("%s %dx%d 速度模型偏离" % (fmt, w, h), "预估 %.2fx，应落在 %.1f~%.1f" % (sp, lo, hi))
+
+        plan = S.estimate_plan({"format": "hevc", "quality": "normal", "aspects": ["source"],
+                                "output_dir": out_dir, "suffix": "_X", "skip_existing": True,
+                                "luts": [], "intensity": 1.0},
+                               S.list_videos(clips_dir))
+        if plan["tasks"] >= 1 and plan["est_sec"] > 0:
+            ok("预估整批：%d 个任务，素材 %s，预计 %s" % (
+                plan["tasks"], plan["media_txt"], plan["est_txt"]))
+        else:
+            bad("预估结果异常", json.dumps(plan, ensure_ascii=False)[:200])
+
+        # 已存在的输出要算进「跳过」，不占时长
+        fake = os.path.join(out_dir, "TEST_0001_X.mp4")
+        with open(fake, "wb") as f:
+            f.write(b"0" * 4096)
+        plan2 = S.estimate_plan({"format": "hevc", "quality": "normal", "aspects": ["source"],
+                                 "output_dir": out_dir, "suffix": "_X", "skip_existing": True,
+                                 "luts": [], "intensity": 1.0},
+                                S.list_videos(clips_dir))
+        if plan2["skip"] >= 1 and plan2["media_sec"] < plan["media_sec"]:
+            ok("续跑时已存在的输出被算作跳过（%d 个，不占剩余时长）" % plan2["skip"])
+        else:
+            bad("跳过项未计入预估", json.dumps(plan2, ensure_ascii=False)[:200])
+        os.remove(fake)
+
+        # 画幅越多越久：4 个画幅的耗时应当明显多于 1 个
+        multi = S.estimate_plan({"format": "hevc", "quality": "normal",
+                                 "aspects": ["source", "9x16", "1x1", "4x5"],
+                                 "output_dir": out_dir, "suffix": "_Y", "skip_existing": True,
+                                 "luts": [], "intensity": 1.0},
+                                S.list_videos(clips_dir))
+        if multi["est_sec"] > plan["est_sec"] * 2:
+            ok("多画幅耗时翻倍合理（1 画幅 %s → 4 画幅 %s）" % (plan["est_txt"], multi["est_txt"]))
+        else:
+            bad("多画幅耗时未叠加", "%s → %s" % (plan["est_txt"], multi["est_txt"]))
+
+        # 前端拿到的时间格式要能读懂（超过 1 小时带小时位）
+        if S.fmt_dur(45) == "00:45" and S.fmt_dur(3725) == "1:02:05":
+            ok("时长格式：%s / %s（超过 1 小时带小时位）" % (S.fmt_dur(45), S.fmt_dur(3725)))
+        else:
+            bad("时长格式不对", "%s / %s" % (S.fmt_dur(45), S.fmt_dur(3725)))
+    except Exception as e:
+        bad("时长预估测试", str(e))
 
     # 清理
     for p in staged:
