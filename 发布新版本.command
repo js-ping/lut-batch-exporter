@@ -83,7 +83,9 @@ REL_JSON=$(curl -s --noproxy '*' --resolve "api.github.com:443:${API_IP}" \
   -H "Accept: application/vnd.github+json" \
   "${API}/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/v${VER}")
 
-REL_ID=$(echo "$REL_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id') or '')" 2>/dev/null || true)
+# 注意：这里必须用 printf 不能 echo —— zsh 的 echo 会把 JSON 里的 \n 转成真换行，
+# 解析必失败，表现就是「Release 已存在却报创建失败」
+REL_ID=$(printf '%s' "$REL_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id') or '')" 2>/dev/null || true)
 
 if [ -z "$REL_ID" ]; then
   python3 - "$VER" <<'PY' > /tmp/rel_payload.json
