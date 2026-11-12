@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lut_analyze
 
 APP_NAME = "LUT 批量导出器"
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # 工具包根目录
 PROG = os.path.join(ROOT, "程序")

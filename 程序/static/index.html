@@ -297,6 +297,16 @@ input[type=range]{width:100%;accent-color:var(--acc);height:4px;cursor:pointer}
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-thumb{background:#2a3038;border-radius:5px;border:2px solid var(--panel)}
 ::-webkit-scrollbar-thumb:hover{background:#3a424e}
+.envbar{display:none;gap:14px;align-items:flex-start;margin:0 0 18px;padding:14px 16px;
+  border:1px solid rgba(226,104,92,.45);border-left:3px solid var(--err);
+  background:rgba(226,104,92,.07);border-radius:10px;font-size:12.5px;line-height:1.75;color:var(--dim)}
+.envbar.show{display:flex}
+.envbar b{color:var(--txt);font-size:13.5px}
+.envbar code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.07);
+  border:1px solid var(--line2);border-radius:6px;padding:2px 8px;user-select:all;white-space:nowrap;color:var(--txt)}
+.envbar .acts{display:flex;gap:8px;margin-left:auto;flex-shrink:0;align-items:center}
+@media(max-width:720px){.envbar{flex-direction:column}.envbar .acts{margin-left:0}}
+
 ::-webkit-scrollbar-track{background:transparent}
 </style>
 </head>
@@ -315,6 +325,18 @@ input[type=range]{width:100%;accent-color:var(--acc);height:4px;cursor:pointer}
     <a class="pill" href="/help" target="_blank">📖 说明书</a>
   </div>
 </header>
+
+<div class="envbar" id="envBar">
+  <div>
+    <b id="envBarTitle">缺少 ffmpeg</b><br>
+    <span id="envBarBody">这工具靠 ffmpeg 干活。打开「终端」（聚焦搜索里输 terminal），粘贴下面这行回车，装完回来点右边按钮。</span><br>
+    <code id="envBarCmd">brew install ffmpeg</code>
+  </div>
+  <div class="acts">
+    <button class="btn ghost sm" onclick="copyEnvCmd()">复制命令</button>
+    <button class="btn sm" onclick="recheckEnv()">我已装好，重新检测</button>
+  </div>
+</div>
 
 <div class="grid">
 
@@ -564,6 +586,35 @@ function fmtDur(s){
 }
 function baseName(p){ return (p||'').split('/').pop().replace(/\.cube$/i,'') }
 
+/* ---------------- 缺少依赖时的提示条 ---------------- */
+function updateEnvBar(e){
+  const bar=$('envBar'); if(!bar) return;
+  const noFf = e && e.ffmpeg_ok===false, noProbe = e && e.ffprobe_ok===false;
+  if(!noFf && !noProbe){ bar.classList.remove('show'); return }
+  $('envBarTitle').textContent = noFf ? '缺少 ffmpeg' : '缺少 ffprobe';
+  $('envBarBody').innerHTML = noFf
+    ? '这工具靠 ffmpeg 干活。打开「终端」（聚焦搜索里输 terminal），粘贴下面这行回车，装完回来点右边按钮。'
+    : 'ffprobe 通常和 ffmpeg 一起装。装完回来点右边按钮重新检测。';
+  $('envBarCmd').textContent = 'brew install ffmpeg';
+  bar.classList.add('show');
+}
+async function copyEnvCmd(){
+  const t=$('envBarCmd').textContent;
+  try{ await navigator.clipboard.writeText(t); toast('已复制：'+t) }
+  catch(err){ toast('复制失败，手动选中那行命令即可', true) }
+}
+async function recheckEnv(){
+  try{
+    const e = await api('/api/env');
+    S.env=e;
+    $('envTxt').textContent = e.ffmpeg_ok ? ('ffmpeg '+e.ffmpeg_version) : '未找到 ffmpeg';
+    $('envDot').className = 'dot'+(e.ffmpeg_ok?'':' bad');
+    $('envFfmpeg').style.borderColor = e.ffmpeg_ok ? '' : 'rgba(226,104,92,.5)';
+    if(e.ffmpeg_ok && e.ffprobe_ok){ updateEnvBar(e); toast('已检测到 ffmpeg '+e.ffmpeg_version) }
+    else { updateEnvBar(e); toast('还没检测到，装完要重新打开一次「终端」或者重启 App', true) }
+  }catch(err){ toast('检测失败：'+err.message, true) }
+}
+
 /* ---------------- 环境 ---------------- */
 async function boot(){
   try{
@@ -577,6 +628,7 @@ async function boot(){
       toast('未检测到 ffmpeg，请先按说明书安装', true);
       $('envTxt').parentElement.style.borderColor='rgba(226,104,92,.5)';
     }
+    updateEnvBar(e);
     if(e.hevc_vt){ $('envHw').style.display='flex' }
     renderFmts(e.formats);
     renderAspects(e.aspects);
