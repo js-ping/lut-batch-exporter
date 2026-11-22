@@ -785,12 +785,74 @@ print(json.dumps({"expanded": m.EXPANDED, "data": m.DATA,
         else:
             bad("不可写目录没有降级", got["records"])
 
-        if got["version"] == "1.7.0":
+        if got["version"] == "1.7.1":
             ok("版本号一致：v%s" % got["version"])
         else:
             bad("版本号不一致", got["version"])
     except Exception as e:
         bad("目录布局测试", str(e))
+
+    # ---------- 17 整批判定（未判定不该成片出现）----------
+    section("17. 整批 Log 结论（素材多了也不能全变「未判定」）")
+
+    def fake_batch(types):
+        """按给定类型造一批素材，None 表示没判定过。"""
+        files = [{"name": "c%02d" % i, "log_type": (t or "unknown"), "log_inferred": False}
+                 for i, t in enumerate(types)]
+        judged = [(i, f, {"type": t, "label": t, "confidence": "inferred"})
+                  for i, (f, t) in enumerate(zip(files, types)) if t]
+        return files, judged
+
+    try:
+        # ① 53 条里只有 6 条抽了帧 → 整批必须给出结论，不能是「无法判定」
+        files, judged = fake_batch(["log_other"] * 6 + [None] * 47)
+        sm = S.summarize_log(files, judged)
+        left = sum(1 for f in files if f["log_type"] == "unknown")
+        if sm and sm["type"] == "log_other" and left == 0:
+            ok("6 条实判 + 47 条没抽帧 → 整批「%s」，无未判定" % sm["label"])
+        else:
+            bad("整批结论被未抽帧的条目带跑", "type=%s 剩余未判定=%d" % ((sm or {}).get("type"), left))
+
+        if sum(1 for f in files if f.get("log_inferred")) == 47:
+            ok("47 条被标记成「相邻推断」，不冒充逐条判定")
+        else:
+            bad("推断标记数量不对")
+
+        # ② 混批：一半 Log 一半正常片，必须报「不一致」而不是硬选一个
+        files, judged = fake_batch(["log_other"] * 6 + ["rec709"] * 6)
+        sm = S.summarize_log(files, judged)
+        if sm["type"] == "mixed":
+            ok("6 : 6 混批 → 报「%s」" % sm["label"])
+        else:
+            bad("混批没识别出来", "type=%s" % sm["type"])
+
+        # ③ 推断要就近，不能被全局多数派带跑
+        #    两端各一条实判，中间全是没抽帧的 → 左半应变 Log，右半应变已转换
+        types = ["log_other"] + [None] * 10 + ["rec709"]
+        files, judged = fake_batch(types)
+        S.summarize_log(files, judged)
+        left_ok = all(f["log_type"] == "log_other" for f in files[:6])
+        right_ok = all(f["log_type"] == "rec709" for f in files[6:])
+        if left_ok and right_ok:
+            ok("没抽帧的条目按最近的实判补齐（左 6 条 Log / 右 5 条已转换）")
+        else:
+            bad("就近推断失效", "%s" % [f["log_type"] for f in files])
+
+        # ④ 一条都没判出来 → 老实说无法判定，别瞎猜
+        files, judged = fake_batch([None] * 5)
+        sm = S.summarize_log(files, judged)
+        if sm["type"] == "unknown" and all(f["log_type"] == "unknown" for f in files):
+            ok("完全没有依据时保持「无法判定」，不硬猜")
+        else:
+            bad("无依据时乱下结论", (sm or {}).get("type"))
+
+        # ⑤ 一条素材都没有 → 不能崩
+        if S.summarize_log([], []) is None:
+            ok("空文件夹不报错")
+        else:
+            bad("空文件夹处理异常")
+    except Exception as e:
+        bad("整批判定测试", str(e))
 
     # 清理
     for p in staged:

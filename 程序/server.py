@@ -25,7 +25,7 @@ import lut_analyze
 
 APP_NAME = "LUT 批量导出器"        # 界面上显示的名字，带空格好看
 BUNDLE = "LUT批量导出器"           # 落在磁盘上的名字，不带空格（跟 .app 一致）
-VERSION = "1.7.0"
+VERSION = "1.7.1"
 
 # ---------------------------------------------------------------- 目录布局
 #
@@ -433,6 +433,68 @@ def detect_log_cached(path, info, allow_sample=True):
             _DETECT_CACHE = {k: _DETECT_CACHE[k] for k in keys}
         save_json(DETECT_CACHE_PATH, _DETECT_CACHE)
     return res
+
+
+def summarize_log(files, judged):
+    """给整批素材下结论，并把没抽帧的条目按相邻实判结果补齐。
+
+    files  : list[dict]，每项已带 log_type（可能是 "unknown"）
+    judged : [(idx, file, det)]，只放真正有结论的
+
+    两条硬规矩（v1.7.1 修的）：
+      ① 多数派只在 judged 里投票。以前把没抽帧的 "unknown" 也算一票，
+         素材超过 6 条时 unknown 必然占多数，整批就被判成「无法判定」。
+      ② 一致性检验也只看 judged。推断是从邻居借来的，不能拿它证明多数派。
+    """
+    vote = {}
+    for _i, _f, det in judged:
+        vote[det["type"]] = vote.get(det["type"], 0) + 1
+    total = len(files) or 1
+    top = max(vote.items(), key=lambda kv: kv[1])[0] if vote else None
+
+    # 没抽上帧的按「最近的一条实判」归拢：相机素材通常连着拍，
+    # 邻居的结论比整批平均值靠谱，混批时也不会被全局多数派带跑。
+    inherited = 0
+    if judged:
+        evidence = [(i, det["type"]) for i, _f, det in judged]
+        for idx, f in enumerate(files):
+            if f.get("log_type") != "unknown":
+                continue
+            f["log_type"] = min(evidence, key=lambda e: abs(e[0] - idx))[1]
+            f["log_inferred"] = True
+            inherited += 1
+
+    log_counts = {}
+    for f in files:
+        log_counts[f["log_type"]] = log_counts.get(f["log_type"], 0) + 1
+
+    if not top:
+        if not files:
+            return None
+        return {"type": "unknown", "label": "无法判定", "confidence": "none",
+                "reason": "这批素材没有色彩元数据，抽帧也没得到结论 —— 用「试色板」看一眼再手动指定"}
+
+    breakdown = {LOG_TYPES.get(k, {"label": k})["label"]: v
+                 for k, v in sorted(log_counts.items(), key=lambda kv: -kv[1])}
+    judged_total = sum(vote.values()) or 1
+    if vote.get(top, 0) / float(judged_total) >= 0.6:
+        # 大多数素材一致，采信它；用真正判过的那条当代表，理由才准确
+        rep = next((det for _i, _f, det in judged if det["type"] == top), {})
+        reason = "%d 条素材中有 %d 条属于这一类" % (total, log_counts.get(top, 0))
+        if inherited:
+            reason += "（其中 %d 条未逐条抽帧，按相邻素材推断）" % inherited
+        summary = {"type": top,
+                   "label": rep.get("label") or LOG_TYPES.get(top, {}).get("label", top),
+                   "confidence": rep.get("confidence", "inferred"),
+                   "reason": reason}
+        if rep.get("stats"):
+            summary["stats"] = rep["stats"]
+    else:
+        summary = {"type": "mixed", "label": "素材类型不一致", "confidence": "inferred",
+                   "reason": "这一批里混了几种色彩曲线（%d 条实判结果分成 %d 类），"
+                             "建议分开处理，或手动指定" % (judged_total, len(vote))}
+    summary["counts"] = breakdown
+    return summary
 
 
 def match_convert_lut(luts, log_type):
@@ -1667,10 +1729,20 @@ class Handler(BaseHTTPRequestHandler):
 
         # 全部素材都体检一遍（首次慢一点，之后走缓存）
         counts = {"ok": 0, "warn": 0, "reject": 0}
-        log_counts = {}
         warnings = []
         sampled = 0
-        for f in files:
+        judged = []          # [(idx, file, det)] 只装「真有结论」的
+
+        # 抽帧点均匀铺满整份清单，而不是只抽开头 6 条 ——
+        # 同样只解 6 次码，但混批（前松后正）的漏判概率小很多
+        n = len(files)
+        spots = set()
+        if n:
+            k = min(6, n)
+            for i in range(k):
+                spots.add(min(n - 1, int(round(i * (n - 1) / float(max(1, k - 1))))))
+
+        for idx, f in enumerate(files):
             info = probe_cached(f["path"])
             f["info"] = info
             f["bit_depth"] = info.get("bit_depth", 0)
@@ -1678,38 +1750,20 @@ class Handler(BaseHTTPRequestHandler):
             counts[lv] = counts.get(lv, 0) + 1
             if note and lv == "warn" and len(warnings) < 3:
                 warnings.append("%s：%s" % (f["name"], note))
-            # 元数据没结论的才抽帧，且最多抽 6 条，剩下的按多数派归拢
-            allow = sampled < 6
+            # 元数据没结论的才抽帧，最多 6 条
+            allow = sampled < 6 and idx in spots
             det = detect_log_cached(f["path"], info, allow_sample=allow)
             if det.get("stats"):
                 sampled += 1
             f["log_type"] = det["type"]
-            log_counts[det["type"]] = log_counts.get(det["type"], 0) + 1
+            f["log_inferred"] = False
+            if det.get("confidence") != "none":
+                judged.append((idx, f, det))
 
         _cache_save()
 
         sample = files[0]["info"] if files else {}
-        summary = None
-        if log_counts:
-            total = len(files) or 1
-            top, top_n = max(log_counts.items(), key=lambda kv: kv[1])
-            breakdown = {LOG_TYPES.get(k, {"label": k})["label"]: v
-                         for k, v in sorted(log_counts.items(), key=lambda kv: -kv[1])}
-            if top_n / float(total) >= 0.6:
-                # 大多数素材一致，采信它
-                det = detect_log_cached(
-                    files[0]["path"], sample) if files else {"type": top}
-                if det.get("type") != top:
-                    det = {"type": top,
-                           "label": LOG_TYPES.get(top, {}).get("label", top),
-                           "confidence": "inferred" if top in ("log_other", "unknown") else "metadata",
-                           "reason": "%d 条素材中有 %d 条属于这一类" % (total, top_n)}
-                summary = dict(det)
-            else:
-                summary = {"type": "mixed", "label": "素材类型不一致",
-                           "confidence": "inferred",
-                           "reason": "这一批里混了几种色彩曲线，建议分开处理，或手动指定"}
-            summary["counts"] = breakdown
+        summary = summarize_log(files, judged)
 
         return self._json({
             "count": len(files),

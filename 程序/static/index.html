@@ -739,9 +739,9 @@ async function scanInput(silent){
   }catch(e){ $('inHint').textContent=''; toast(e.message,true) }
 }
 
-function logBadge(t){
-  if(['apple_log_2','apple_log','log_other','hlg','pq'].includes(t)) return ['log','Log 灰片'];
-  if(t==='rec709') return ['rec','已转换'];
+function logBadge(t, inferred){
+  if(['apple_log_2','apple_log','log_other','hlg','pq'].includes(t)) return ['log', inferred?'≈ Log 灰片':'Log 灰片'];
+  if(t==='rec709') return ['rec', inferred?'≈ 已转换':'已转换'];
   if(t==='mixed') return ['mid','待确认'];
   return ['mid','未判定'];
 }
@@ -757,14 +757,17 @@ function renderFileList(files, count){
     const info=f.info||{};
     const dur = info.duration? fmtDur(info.duration) : '—';
     const dim = info.width? `${info.width}×${info.height}` : '—';
-    const [cls,txt] = logBadge(f.log_type);
+    const [cls,txt] = logBadge(f.log_type, f.log_inferred);
     const d8 = f.bit_depth && f.bit_depth<=8;
     const cells = [`<span class="fn">${esc(f.name)}</span>`,
                    `<span class="fd">${dim}</span>`,
                    `<span class="fd">${dur}</span>`];
     if (d8) cells.push(verdictChip('d8','8bit'));
     cells.push(verdictChip(cls, txt));
-    return `<div class="frow" title="${esc(f.rel)}">${cells.join('')}</div>`;
+    const tip = f.log_inferred
+      ? `${f.rel}\n（同批推断：为省时间没有逐条抽帧，按这一批其他素材的结论归拢。要逐条确认可用「试色板」）`
+      : f.rel;
+    return `<div class="frow" title="${esc(tip)}">${cells.join('')}</div>`;
   }).join('');
   $('filesList').innerHTML = rows +
     (count>60? `<div class="fmore">还有 ${count-60} 条未列出（都会处理）</div>`:'');

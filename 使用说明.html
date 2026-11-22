@@ -80,7 +80,7 @@ tbody tr:nth-child(even){background:color-mix(in srgb,var(--line) 22%,transparen
 <p>不需要打开 Resolve，不需要剪映，不需要一条条手动加滤镜。</p>
 <hr>
 <h2 id="安装-dmg-拖一下就行">安装（dmg 拖一下就行）</h2>
-<ol><li>双击下载到的 <strong><code>LUTBatchExporter_v1.7.0_macOS.dmg</code></strong></li><li>弹出的小窗口里，把 <strong><code>LUT批量导出器</code></strong> 拖进旁边的 <strong><code>Applications</code></strong> 文件夹（就是「应用程序」）</li><li>关闭窗口，从「启动台」或「应用程序」里打开它</li></ol>
+<ol><li>双击下载到的 <strong><code>LUTBatchExporter_v1.7.1_macOS.dmg</code></strong></li><li>弹出的小窗口里，把 <strong><code>LUT批量导出器</code></strong> 拖进旁边的 <strong><code>Applications</code></strong> 文件夹（就是「应用程序」）</li><li>关闭窗口，从「启动台」或「应用程序」里打开它</li></ol>
 <p>第一次打开如果系统说「无法验证开发者」（软件没有苹果付费公证，正常现象）：</p>
 <blockquote>在 app 图标上<strong>右键 → 打开</strong> → 再点一次「打开」。以后双击就正常了。 或者：系统设置 → 隐私与安全性 → 往下找到它 → 点「仍要打开」。</blockquote>
 <p><strong>你的东西存在哪：</strong> 配置、导出记录、缓存都在 <code>~/Library/Application Support/LUT批量导出器/</code>，升级只要把新 app 拖进「应用程序」覆盖，数据不动。</p>
@@ -111,8 +111,9 @@ tbody tr:nth-child(even){background:color-mix(in srgb,var(--line) 22%,transparen
 <p>扫描时会做两件事：</p>
 <p><strong>一、规格标签</strong>——多少条、总体积、编码、分辨率、帧率、位深、时长、色彩标签、音轨。</p>
 <p><strong>二、逐条体检清单</strong>——每条素材一行：文件名、分辨率、时长、判定徽章。</p>
-<div class="tw"><table><thead><tr><th>徽章</th><th>含义</th></tr></thead><tbody><tr><td data-label="徽章">橙色 <strong>Log 灰片</strong></td><td data-label="含义">这条素材是 Log 曲线，需要转换 LUT</td></tr><tr><td data-label="徽章">绿色 <strong>已转换</strong></td><td data-label="含义">这条素材已经是 Rec.709，不需要转换 LUT</td></tr><tr><td data-label="徽章">红色 <strong>8bit</strong></td><td data-label="含义">源素材只有 8bit，套 Log 转换 LUT 可能出现色阶断层</td></tr><tr><td data-label="徽章">灰色 <strong>待确认 / 未判定</strong></td><td data-label="含义">判断不出来，建议用试色板看一眼</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>徽章</th><th>含义</th></tr></thead><tbody><tr><td data-label="徽章">橙色 <strong>Log 灰片</strong></td><td data-label="含义">这条素材是 Log 曲线，需要转换 LUT</td></tr><tr><td data-label="徽章">橙色 <strong>≈ Log 灰片</strong></td><td data-label="含义">同上，但<strong>没逐条抽帧</strong>：为了速度，工具按相邻素材的实判结果推断出来（悬停可看说明）</td></tr><tr><td data-label="徽章">绿色 <strong>已转换</strong></td><td data-label="含义">这条素材已经是 Rec.709，不需要转换 LUT</td></tr><tr><td data-label="徽章">绿色 <strong>≈ 已转换</strong></td><td data-label="含义">同上，按相邻素材推断</td></tr><tr><td data-label="徽章">红色 <strong>8bit</strong></td><td data-label="含义">源素材只有 8bit，套 Log 转换 LUT 可能出现色阶断层</td></tr><tr><td data-label="徽章">灰色 <strong>待确认 / 未判定</strong></td><td data-label="含义">判断不出来，建议用试色板看一眼</td></tr></tbody></table></div>
 <h3 id="log-识别框-第-①-栏里的那个方框">Log 识别框（第 ① 栏里的那个方框）</h3>
+<blockquote>素材很多时，工具只对<strong>均匀抽取的 6 条</strong>做逐帧检测（每抽一帧都要解码，几十条全抽会卡）， 剩下的按最近那条实判结果归拢，并标上 <code>≈</code>。想逐条确认：点某条素材用「试色板」看一帧即可。</blockquote>
 <p>工具会用两种办法判断素材是什么曲线：</p>
 <div class="tw"><table><thead><tr><th>依据</th><th>可靠性</th><th>显示</th></tr></thead><tbody><tr><td data-label="依据"><strong>文件元数据</strong>（ProRes / HEVC 里 Apple 写的色彩标签）</td><td data-label="可靠性">最可靠</td><td data-label="显示"><code>元数据确认</code> / <code>元数据推断</code></td></tr><tr><td data-label="依据"><strong>画面特征</strong>（抽一帧算饱和度和黑位，Log 画面必然低饱和、黑位抬高）</td><td data-label="可靠性">只能判断「像不像 Log」</td><td data-label="显示"><code>画面特征推断</code></td></tr></tbody></table></div>
 <p><strong>它诚实地承认自己分不清 Apple Log 和 Apple Log 2</strong>——两者的像素特征几乎一样，只有机型不同（iPhone 15/16 Pro 是 Apple Log，17 Pro 起是 Apple Log 2）。</p>
