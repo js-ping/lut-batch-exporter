@@ -711,6 +711,87 @@ def main():
     except Exception as e:
         bad("时长预估测试", str(e))
 
+    # ---------- 16 目录布局（安装版 / 展开版）----------
+    section("16. 目录布局（装进 app bundle 后数据要能落到外面）")
+
+    def probe_layout(pkg_dir, env_extra):
+        """在子进程里加载 server.py，回报它算出来的目录（等价于 app 启动时的真实判定）。"""
+        code = r"""
+import importlib.util, json, sys
+d = sys.argv[1]
+spec = importlib.util.spec_from_file_location("srv_probe", d + "/server.py")
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+print(json.dumps({"expanded": m.EXPANDED, "data": m.DATA,
+                  "settings": m.SETTINGS, "records": m.RECORDS,
+                  "prog": m.PROG, "version": m.VERSION}))
+"""
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("LUT_DATA_DIR", "LUT_PORT", "LUT_NO_BROWSER")}
+        env.update(env_extra)
+        r = subprocess.run([sys.executable, "-c", code, pkg_dir],
+                           capture_output=True, text=True, env=env, timeout=40)
+        line = (r.stdout or "").strip().splitlines()
+        if not line:
+            raise RuntimeError((r.stderr or "无输出")[-300:])
+        return json.loads(line[-1])
+
+    try:
+        home = os.path.join(tmp, "fakehome")
+        os.makedirs(home, exist_ok=True)
+
+        # ① 展开版：程序/ 就在工具包根目录下，旁边有 启动.command
+        got = probe_layout(os.path.join(ROOT, "程序"), {"HOME": home})
+        if got["expanded"] and got["data"] == ROOT and got["settings"] == os.path.join(ROOT, "程序"):
+            ok("展开版：数据留在工具包目录（%s）" % os.path.basename(got["data"]))
+        else:
+            bad("展开版目录判定不对", json.dumps(got, ensure_ascii=False)[:220])
+
+        # ② 安装版：程序/ 被拷进 App/Contents/Resources/，启动器传 LUT_DATA_DIR
+        appres = os.path.join(tmp, "Fake.app", "Contents", "Resources", "程序")
+        os.makedirs(appres, exist_ok=True)
+        for f in ("server.py", "lut_analyze.py"):
+            shutil.copy2(os.path.join(ROOT, "程序", f), appres)
+        os.makedirs(os.path.join(appres, "luts"), exist_ok=True)
+        os.makedirs(os.path.join(appres, "static"), exist_ok=True)
+        datadir = os.path.join(tmp, "appsupport")
+
+        got = probe_layout(appres, {"HOME": home, "LUT_DATA_DIR": datadir})
+        if (not got["expanded"]) and got["data"] == datadir and got["settings"] == datadir \
+                and got["records"] == os.path.join(datadir, "运行记录") \
+                and got["prog"] == appres:
+            ok("安装版：代码在 bundle 里只读，数据外置到 LUT_DATA_DIR")
+        else:
+            bad("安装版目录判定不对", json.dumps(got, ensure_ascii=False)[:220])
+
+        if os.path.isdir(os.path.join(datadir, "运行记录", ".cache")):
+            ok("安装版会自动建好 运行记录/ 与 .cache/")
+        else:
+            bad("安装版没建出数据子目录", datadir)
+
+        # ③ 安装版但没传环境变量：兜底到 Application Support（用假 HOME，不污染真目录）
+        got = probe_layout(appres, {"HOME": home})
+        want = os.path.join(home, "Library", "Application Support", "LUT批量导出器")
+        if (not got["expanded"]) and os.path.abspath(got["data"]) == os.path.abspath(want):
+            ok("没传 LUT_DATA_DIR 时兜底到 ~/Library/Application Support/")
+        else:
+            bad("安装版兜底路径不对", "%s ≠ %s" % (got["data"], want))
+
+        # ④ 数据目录不可写：不许崩，退回临时目录继续跑
+        got = probe_layout(appres, {"HOME": home,
+                                    "LUT_DATA_DIR": "/System/绝不可能写入的目录"})
+        if got["records"].startswith(tempfile.gettempdir()):
+            ok("数据目录不可写时退回临时目录，服务照常起")
+        else:
+            bad("不可写目录没有降级", got["records"])
+
+        if got["version"] == "1.7.0":
+            ok("版本号一致：v%s" % got["version"])
+        else:
+            bad("版本号不一致", got["version"])
+    except Exception as e:
+        bad("目录布局测试", str(e))
+
     # 清理
     for p in staged:
         try:

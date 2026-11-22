@@ -48,33 +48,15 @@ if [ -z "$GH_password" ]; then
   read -p "按回车关闭…"; exit 1
 fi
 
-# ---------- 5. 打安装包 ----------
-echo "▶ 打包 macOS 安装包…"
-# 注意：config.json / lut_*.json 里是**本机路径和私人设置**，绝不能进公开安装包
-rm -rf /tmp/lut_pack && mkdir -p /tmp/lut_pack/LUT批量导出器
-rsync -a \
-  --exclude '.git' --exclude '开发' --exclude '运行记录' \
-  --exclude '.DS_Store' --exclude '发布新版本.command' \
-  --exclude '__pycache__' \
-  --exclude '程序/config.json' --exclude '程序/lut_fav.json' \
-  --exclude '程序/lut_hidden.json' --exclude '程序/lut_meta.json' \
-  ./ /tmp/lut_pack/LUT批量导出器/
-python3 - <<'PY'
-import os, zipfile
-SRC='/tmp/lut_pack/LUT批量导出器'
-OUT='/tmp/LUTBatchExporter_vX_macOS.zip'
-if os.path.exists(OUT): os.remove(OUT)
-with zipfile.ZipFile(OUT,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
-    for root,dirs,files in os.walk(SRC):
-        dirs.sort(); files.sort()
-        for f in files:
-            full=os.path.join(root,f)
-            z.write(full, os.path.relpath(full, os.path.dirname(SRC)))
-print('  包大小：', os.path.getsize(OUT), 'bytes')
-PY
-# 用版本号命名
-ZIP="/tmp/LUTBatchExporter_v${VER}_macOS.zip"
-mv /tmp/LUTBatchExporter_vX_macOS.zip "$ZIP"
+# ---------- 5. 打 dmg 安装包 ----------
+echo "▶ 打包 dmg 安装包…"
+# 打包脚本内部会做隐私校验：config.json / lut_*.json 一律不进包
+zsh 开发/打包dmg.command 2>&1 | sed 's/^/  /'
+ZIP="$PWD/LUTBatchExporter_v${VER}_macOS.dmg"
+if [ ! -f "$ZIP" ]; then
+  echo "✗ 没生成 dmg，中止"
+  read -p "按回车关闭…"; exit 1
+fi
 
 # ---------- 6. 建 Release（已存在就复用）----------
 echo "▶ 建 GitHub Release…"
@@ -97,7 +79,7 @@ try:
     body = m.group(0).strip() if m else f'v{ver}'
 except Exception:
     body = f'v{ver}'
-body += f"\n\n---\n\n**安装**：下载 `LUTBatchExporter_v{ver}_macOS.zip`，解压后双击 `LUT批量导出器.app`。\n"
+body += (f"\n\n---\n\n**安装**：下载 `LUTBatchExporter_v{ver}_macOS.dmg`，双击打开，把 `LUT批量导出器` 拖进「应用程序」。\n\n首次打开若被系统拦（未公证）：在 app 上右键 →「打开」→ 再点「打开」。\n\n需要 macOS 11+ 与 ffmpeg：`brew install ffmpeg`。\n")
 json.dump({"tag_name": f"v{ver}", "name": f"v{ver}", "body": body,
            "draft": False, "prerelease": False},
           open('/dev/stdout','w'), ensure_ascii=False)
@@ -120,7 +102,7 @@ fi
 
 # ---------- 7. 传附件 ----------
 # GitHub 上传接口会丢非 ASCII 文件名，所以附件用 ASCII 名
-ZIP_NAME="LUTBatchExporter_v${VER}_macOS.zip"
+ZIP_NAME="LUTBatchExporter_v${VER}_macOS.dmg"
 echo "▶ 上传 ${ZIP_NAME}…"
 
 # 先删同名旧附件
@@ -144,7 +126,7 @@ q = urllib.parse.urlencode({"name": name})
 conn = http.client.HTTPSConnection("uploads.github.com", 443, timeout=300)
 conn.request("POST", f"/repos/js-ping/lut-batch-exporter/releases/{rel_id}/assets?{q}",
              body=data,
-             headers={"Authorization":"Bearer "+token, "Content-Type":"application/zip",
+             headers={"Authorization":"Bearer "+token, "Content-Type":"application/x-apple-diskimage",
                       "Accept":"application/vnd.github+json",
                       "Content-Length":str(len(data)), "User-Agent":"lut-release"})
 r = conn.getresponse(); body = r.read().decode()

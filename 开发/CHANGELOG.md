@@ -1,5 +1,65 @@
 # 版本说明
 
+## v1.7.0 — 2026-11-22
+
+### 做成了 dmg 安装版：拖进「应用程序」就能用
+
+以前发布的 `.app` 是个 **355K 的轻外壳**，用 `Bundle.main.bundleURL.deletingLastPathComponent()` 去隔壁找 `程序/server.py`。也就是说它必须和 `程序/` 并排放，单独拖进「应用程序」就报「工具文件缺失」——这是发出去的包一直被吐槽的点。
+
+现在同一个二进制支持两种形态，靠「`程序/` 在哪」自己判断：
+
+| 形态 | `程序/` 位置 | 数据写哪 |
+|---|---|---|
+| **安装版**（dmg） | `LUT批量导出器.app/Contents/Resources/程序` | `~/Library/Application Support/LUT批量导出器/` |
+| 展开版（工具包） | 与 `.app` 并排 | 工具包根目录 + `程序/` |
+
+### 目录布局重构（server.py）
+
+原来是 `ROOT = 程序/..`，配置、缓存、日志全写在代码旁边。装进 app bundle 后这条路走不通——bundle 是只读的，写进去还会破坏 ad-hoc 签名。改成五层：
+
+- `CODE_DIR` 放代码的目录；`ROOT` 展开版的工具包根；`PROG` 代码目录（static、luts 在这下面）
+- `DATA` 数据目录：展开版 = `ROOT`，安装版 = `LUT_DATA_DIR` 环境变量或 `~/Library/Application Support/LUT批量导出器`
+- `SETTINGS` 小配置文件目录：展开版仍留在 `程序/`（老用户配置不用搬家），安装版跟 `DATA` 走
+
+判定顺序：有 `LUT_DATA_DIR` → 安装版；否则看 `ROOT` 旁边有没有 `启动.command` / `使用说明.html` / `LUT批量导出器.app` → 展开版；都没有 → 按安装版处理。
+
+### 目录建不起来也不许崩
+
+模块顶层的 `os.makedirs` 原来没有 try/except，装到只读卷、磁盘满、权限不对时整个服务直接起不来。现在逐个建、失败打日志；如果数据目录整条都不可写，自动退回临时目录继续跑（功能可用，只是记录不持久）。
+
+### 启动器（main.swift）
+
+- 先看 `Bundle.main.resourceURL` 里有没有 `程序/server.py`：有 → 安装版，`LUT_DATA_DIR` 指向 `~/Library/Application Support/LUT批量导出器`，并提前把目录建出来
+- 没有 → 展开版，仍走 `.app` 的上一级
+- 菜单项按形态改名：安装版显示「打开数据文件夹」，展开版仍是「打开工具文件夹」
+- 「关于」里写清数据落在哪
+- 缺文件时的提示分开写：安装版提示「重新拖一次 dmg」，展开版提示「放回工具包文件夹」
+
+### 打包
+
+- 新增 `开发/打包dmg.command`：编译 → 组装自包含 `.app`（`程序/` 整个 rsync 进 `Contents/Resources/`）→ 校验 → `codesign --deep --sign -` → `hdiutil create -format UDZO` 封 dmg，附带 `/Applications` 软链和 `使用说明.html`
+- 打包前强制校验：`Resources/程序/*.json` 里只要有一个（私人路径），直接中止
+- `发布新版本.command` 改成产并上传 `.dmg`（`Content-Type: application/x-apple-diskimage`），Release 说明换成拖放安装步骤
+- `.gitignore` 加 `*.dmg`
+
+### 顺手修的
+
+- `开发/生成说明书.command` 连跳两次目录（`cd 开发` 再 `cd 开发/..`），第二次必然失败 —— 改成只跳一次
+- `程序/config.json` 里 `luts[0]` 还是搬家前的旧路径，已按文件名重新定位
+- `Info.plist` 版本号从 1.1.0（很久没跟着升）同步到 1.7.0；`CFBundleName` 去掉空格，与 `LUT批量导出器.app` 一致
+
+### 实测
+
+在**挂载中的 dmg（只读）**里直接跑 `server.py` + 拖进 `/Applications` 跑完整体：
+
+- `/api/env` 返回 `expanded=false`、`data_dir=/tmp/lutdata`，内置两条还原曲线都在
+- 2 条 1080p ProRes 素材（5 秒）套 LUT 导出 H.264 → 2/2 成功，报告 CSV 正常
+- 配置、`运行记录/`、缓存全部落在数据目录；app bundle 一个字节没动
+
+---
+
+---
+
 ## v1.6.1 — 2026-11-12
 
 ### 缺 ffmpeg 时，界面直接把话说明白
@@ -15,7 +75,6 @@
 
 顺手把 `Info.plist` 里的版本号改成跟 `程序/server.py` 一致（以前一直停在 1.1.0），
 「关于」面板里看到的就是真版本了。
-
 
 ## v1.6.0 — 2026-10-27
 

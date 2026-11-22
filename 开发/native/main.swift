@@ -36,13 +36,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var outBuf = ""
     var errBuf = ""
     var loaded = false
-    var toolRoot: URL!
+    var toolRoot: URL!          // 展开版：.app 所在的那层工具包根目录
+    var codeRoot: URL!          // 放 程序/server.py 的目录
+    var dataDir: URL!           // 配置、导出记录真正落盘的地方
+    var installed = false       // true = 程序/ 已经打进 app bundle（dmg 安装版）
     var rootURL: URL?
 
     // ---- 启动
     func applicationDidFinishLaunching(_ note: Notification) {
-        // .app 就放在工具包根目录下，上一级就是根
-        toolRoot = Bundle.main.bundleURL.deletingLastPathComponent()
+        // 两种形态用同一个二进制：
+        //   ① 安装版：程序/ 被拷进 [App].app/Contents/Resources/，从资源目录找代码，
+        //      数据写 ~/Library/Application Support/（bundle 本身是只读的）
+        //   ② 展开版：.app 和 程序/ 并排放，上一级就是工具包根，数据也写在旁边
+        if let res = Bundle.main.resourceURL,
+           FileManager.default.fileExists(atPath: res.appendingPathComponent("程序/server.py").path) {
+            codeRoot = res
+            installed = true
+            let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                in: .userDomainMask).first!
+            dataDir = base.appendingPathComponent("LUT批量导出器")
+            toolRoot = dataDir
+        } else {
+            toolRoot = Bundle.main.bundleURL.deletingLastPathComponent()
+            codeRoot = toolRoot
+            dataDir = toolRoot
+            installed = false
+        }
 
         buildMenu()
         buildWindow()
@@ -63,7 +82,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "关于 LUT 批量导出器", action: #selector(aboutMe), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "打开工具文件夹", action: #selector(openToolFolder), keyEquivalent: "")
+        // 安装版没有「工具包文件夹」可看，菜单改成指向数据目录，免得点了打不开
+        appMenu.addItem(withTitle: installed ? "打开数据文件夹" : "打开工具文件夹",
+                        action: #selector(openToolFolder), keyEquivalent: "")
         appMenu.addItem(withTitle: "打开导出记录", action: #selector(openRecords), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "隐藏", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
@@ -154,11 +175,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             alert("找不到 Python 3", "请先在终端执行：xcode-select --install")
             return
         }
-        let serverPy = toolRoot.appendingPathComponent("程序/server.py").path
+        let serverPy = codeRoot.appendingPathComponent("程序/server.py").path
         guard FileManager.default.fileExists(atPath: serverPy) else {
-            alert("工具文件缺失", "找不到程序/server.py，请把 .app 放回工具包文件夹里。")
+            alert("工具文件缺失", installed
+                  ? "安装不完整：app 里找不到程序/server.py。\n请重新拖一次 dmg 安装。"
+                  : "找不到程序/server.py，请把 .app 放回工具包文件夹里。")
             return
         }
+
+        // 先把数据目录建出来，免得服务端第一次启动时权限/路径不对直接报错
+        try? FileManager.default.createDirectory(at: dataDir,
+                                                 withIntermediateDirectories: true)
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: py)
@@ -167,6 +194,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         env["LUT_NO_BROWSER"] = "1"
         env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
         env["PYTHONUNBUFFERED"] = "1"
+        if installed {
+            // 明确告诉服务端「我是安装版」，别再往只读的 bundle 里写东西
+            env["LUT_DATA_DIR"] = dataDir.path
+        }
         task.environment = env
 
         let op = Pipe(); let ep = Pipe()
@@ -345,7 +376,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func aboutMe() {
         let a = NSAlert()
         a.messageText = "LUT 批量导出器"
-        a.informativeText = "Apple Log 2 灰片批量套 LUT 导出\n全程本地处理，不联网、不上传。\n\n底层：ffmpeg  ·  界面：WebKit\n日志与设置都在工具包文件夹里。"
+        let where_ = installed
+            ? "日志与设置：~/Library/Application Support/LUT批量导出器"
+            : "日志与设置都在工具包文件夹里。"
+        a.informativeText = "Apple Log 2 灰片批量套 LUT 导出\n全程本地处理，不联网、不上传。\n\n底层：ffmpeg  ·  界面：WebKit\n" + where_
         a.addButton(withTitle: "好")
         a.runModal()
     }

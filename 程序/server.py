@@ -23,19 +23,59 @@ from urllib.parse import urlparse, parse_qs
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lut_analyze
 
-APP_NAME = "LUT 批量导出器"
-VERSION = "1.6.1"
+APP_NAME = "LUT 批量导出器"        # 界面上显示的名字，带空格好看
+BUNDLE = "LUT批量导出器"           # 落在磁盘上的名字，不带空格（跟 .app 一致）
+VERSION = "1.7.0"
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # 工具包根目录
-PROG = os.path.join(ROOT, "程序")
+# ---------------------------------------------------------------- 目录布局
+#
+# 有两种运行形态，代码目录和数据目录必须分开算：
+#
+#   ① 工具包展开版：.app 和 程序/ 并排放在一个文件夹里，数据也写在旁边，
+#      方便用户自己翻（双击「打开工具文件夹」就能看到）。
+#   ② 安装版（从 dmg 拖进「应用程序」）：代码在 app bundle 的 Resources 里，
+#      那是只读的 —— 往里面写配置会破坏签名，所以数据必须挪到
+#      ~/Library/Application Support/LUT批量导出器/。
+#
+# 启动器会显式传 LUT_DATA_DIR 说明自己是安装版；直接 python3 跑的时候
+# 就靠「代码目录旁边有没有 启动.command / 使用说明.html / 同名 .app」来判断。
+
+CODE_DIR = os.path.dirname(os.path.abspath(__file__))    # 放 server.py 的目录
+ROOT = os.path.dirname(CODE_DIR)                         # 展开版的工具包根目录
+PROG = CODE_DIR
 STATIC = os.path.join(PROG, "static")
-RECORDS = os.path.join(ROOT, "运行记录")
+
+
+def _is_expanded():
+    if os.environ.get("LUT_DATA_DIR"):
+        return False
+    for marker in ("启动.command", "使用说明.html", BUNDLE + ".app"):
+        if os.path.exists(os.path.join(ROOT, marker)):
+            return True
+    return False
+
+
+EXPANDED = _is_expanded()
+
+if EXPANDED:
+    DATA = ROOT
+elif os.environ.get("LUT_DATA_DIR"):
+    DATA = os.path.abspath(os.path.expanduser(os.environ["LUT_DATA_DIR"]))
+else:
+    DATA = os.path.join(os.path.expanduser("~"), "Library",
+                        "Application Support", BUNDLE)
+
+# 设置类小文件：展开版仍旧放在 程序/ 里（老用户的配置不用搬家），
+# 安装版跟其它数据一起放 Application Support
+SETTINGS = PROG if EXPANDED else DATA
+
+RECORDS = os.path.join(DATA, "运行记录")
 CACHE = os.path.join(RECORDS, ".cache")
 THUMBS = os.path.join(RECORDS, "试色板")
-CONFIG_PATH = os.path.join(PROG, "config.json")
-FAV_PATH = os.path.join(PROG, "lut_fav.json")
-HIDDEN_PATH = os.path.join(PROG, "lut_hidden.json")
-LUT_META_PATH = os.path.join(PROG, "lut_meta.json")     # LUT 曲线分析结果缓存
+CONFIG_PATH = os.path.join(SETTINGS, "config.json")
+FAV_PATH = os.path.join(SETTINGS, "lut_fav.json")
+HIDDEN_PATH = os.path.join(SETTINGS, "lut_hidden.json")
+LUT_META_PATH = os.path.join(SETTINGS, "lut_meta.json")   # LUT 曲线分析结果缓存
 LUT_META_VER = 2                    # 判断算法版本：改算法就 +1，旧缓存自动失效
 PROBE_CACHE_PATH = os.path.join(CACHE, "probe_cache.json")
 DETECT_CACHE_PATH = os.path.join(CACHE, "detect_cache.json")
@@ -61,9 +101,37 @@ BUILTIN_LUTS = {
 VIDEO_EXT = (".mov", ".mp4", ".m4v", ".MOV", ".MP4", ".M4V")
 LUT_EXT = (".cube", ".CUBE")
 
-os.makedirs(RECORDS, exist_ok=True)
-os.makedirs(CACHE, exist_ok=True)
-os.makedirs(THUMBS, exist_ok=True)
+def _ensure_dir(p):
+    """建目录，失败也不能让服务起不来（磁盘满、权限不足都可能发生）。"""
+    try:
+        os.makedirs(p, exist_ok=True)
+        return True
+    except Exception as e:                      # noqa: BLE001
+        print("[目录] 无法创建 %s：%s" % (p, e), flush=True)
+        return False
+
+
+def _write_probe():
+    """给自己留个可写的落点，写不了就退回临时目录，总比整个程序报废强。"""
+    global RECORDS, CACHE, THUMBS
+    global PROBE_CACHE_PATH, DETECT_CACHE_PATH
+    if _ensure_dir(DATA) and _ensure_dir(SETTINGS) \
+            and _ensure_dir(RECORDS) and _ensure_dir(CACHE) and _ensure_dir(THUMBS):
+        return
+    import tempfile
+    base = os.path.join(tempfile.gettempdir(), BUNDLE + "_运行记录")
+    RECORDS = base
+    CACHE = os.path.join(base, ".cache")
+    THUMBS = os.path.join(base, "试色板")
+    PROBE_CACHE_PATH = os.path.join(CACHE, "probe_cache.json")
+    DETECT_CACHE_PATH = os.path.join(CACHE, "detect_cache.json")
+    _ensure_dir(RECORDS)
+    _ensure_dir(CACHE)
+    _ensure_dir(THUMBS)
+    print("[目录] 已退回临时目录：%s" % base, flush=True)
+
+
+_write_probe()
 
 
 # ---------------------------------------------------------------- 工具函数
@@ -1748,7 +1816,12 @@ def api_env():
                         for k, v in AUDIO_MODES.items()],
         "records": RECORDS,
         "builtin_luts": builtin_lut_list(),
-        "root": ROOT,
+        # 安装版下 ROOT 在 app bundle 里（只读），给用户看/打开没有意义，
+        # 统一回报真正放数据的地方。
+        "root": DATA,
+        "data_dir": DATA,
+        "expanded": EXPANDED,
+        "version": VERSION,
     }
 
 

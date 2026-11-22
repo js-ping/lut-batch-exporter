@@ -35,11 +35,24 @@ macOS · 原生窗口 + 本地服务 + ffmpeg · MIT
 
 ## 安装
 
-1. 下载 zip，解压得到 `LUT批量导出器` 文件夹，**整个文件夹**拖进「应用程序」。
+1. 下载 `LUTBatchExporter_v1.7.0_macOS.dmg`，双击打开，把 `LUT批量导出器` 拖进「应用程序」。
 2. 需要 ffmpeg：`brew install ffmpeg`（没装的话 App 里会直接把这条命令摆给你）。
-3. 双击 App。首次打开被系统拦：右键 → 打开 → 再打开。
+3. 从启动台打开。首次打开被系统拦（未公证）：右键 → 打开 → 再打开。
 
-> ⚠️ 别只拖 `.app` 出来。它是个外壳，要靠同一层的 `程序/` 才能跑。
+dmg 里的 `.app` 是**自包含**的（`程序/` 已打进 `Contents/Resources/`），单独拷到任何地方都能跑。
+配置、导出记录、缓存写在 `~/Library/Application Support/LUT批量导出器/`，升级时覆盖 app 即可，数据不动。
+菜单 **LUT 批量导出器 → 打开数据文件夹** 直达。
+
+## 两种运行形态
+
+同一个二进制，靠「`程序/` 在哪」自己判断：
+
+| 形态 | `程序/` 位置 | 数据写哪 | 判断依据 |
+|---|---|---|---|
+| 安装版（dmg） | `LUT批量导出器.app/Contents/Resources/程序` | `~/Library/Application Support/LUT批量导出器/` | bundle 里有 `程序/server.py`，启动器传 `LUT_DATA_DIR` |
+| 展开版（工具包） | 与 `.app` 并排 | 工具包根目录 + `程序/` | 上一级有 `启动.command` / `使用说明.html` / 同名 `.app` |
+
+app bundle 是只读的（往里写还会破坏 ad-hoc 签名），所以安装版必须把数据外置。展开版的设置仍留在 `程序/`，老用户配置不用搬家。
 
 ## 自检
 
@@ -49,11 +62,14 @@ macOS · 原生窗口 + 本地服务 + ffmpeg · MIT
 python3 开发/自检/自检.py
 ```
 
+81 项：环境、Log 识别、每种输出格式、音轨四模式、多画幅、微调、LUT 强度、试色板、报告、内置曲线、LUT 用途辨别、时长预估、安装版/展开版目录布局。
+
 ## 从源码构建
 
 ```bash
-开发/native/构建app.command        # 重新编译原生外壳
-双击 发布新版本.command            # 提交 → 打 tag → 推 GitHub → 建 Release → 传包
+开发/native/构建app.command        # 只重编本机用的轻外壳 .app（程序/ 留在外面）
+开发/打包dmg.command               # 打自包含 .app + 封 dmg（发版用）
+双击 发布新版本.command            # 提交 → 打 tag → 推 GitHub → 建 Release → 传 dmg
 ```
 
 ## 已知限制

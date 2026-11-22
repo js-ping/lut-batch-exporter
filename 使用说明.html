@@ -79,11 +79,18 @@ tbody tr:nth-child(even){background:color-mix(in srgb,var(--line) 22%,transparen
 <p>把 iPhone 用 <strong>Blackmagic Camera</strong> 拍的 <strong>Apple Log 2 灰片</strong>，批量套上你自己的 LUT，一口气导出成正常颜色的成片。</p>
 <p>不需要打开 Resolve，不需要剪映，不需要一条条手动加滤镜。</p>
 <hr>
+<h2 id="安装-dmg-拖一下就行">安装（dmg 拖一下就行）</h2>
+<ol><li>双击下载到的 <strong><code>LUTBatchExporter_v1.7.0_macOS.dmg</code></strong></li><li>弹出的小窗口里，把 <strong><code>LUT批量导出器</code></strong> 拖进旁边的 <strong><code>Applications</code></strong> 文件夹（就是「应用程序」）</li><li>关闭窗口，从「启动台」或「应用程序」里打开它</li></ol>
+<p>第一次打开如果系统说「无法验证开发者」（软件没有苹果付费公证，正常现象）：</p>
+<blockquote>在 app 图标上<strong>右键 → 打开</strong> → 再点一次「打开」。以后双击就正常了。 或者：系统设置 → 隐私与安全性 → 往下找到它 → 点「仍要打开」。</blockquote>
+<p><strong>你的东西存在哪：</strong> 配置、导出记录、缓存都在 <code>~/Library/Application Support/LUT批量导出器/</code>，升级只要把新 app 拖进「应用程序」覆盖，数据不动。</p>
+<p>菜单 <strong>LUT 批量导出器 → 打开数据文件夹</strong> 可以随时打开那个目录（想清缓存、想备份设置都在这）。</p>
+<hr>
 <h2 id="怎么打开-两种方式-选一个">怎么打开（两种方式，选一个）</h2>
-<div class="tw"><table><thead><tr><th>方式</th><th>怎么用</th><th>适合</th></tr></thead><tbody><tr><td data-label="方式"><strong>① 原生 app（推荐）</strong></td><td data-label="怎么用">双击文件夹里的 <strong><code>LUT批量导出器.app</code></strong></td><td data-label="适合">独立 Mac 窗口，不开浏览器、没有标签页、不会因为浏览器卡住而丢进度</td></tr><tr><td data-label="方式">② 终端 + 浏览器</td><td data-label="怎么用">双击 <code>启动.command</code></td><td data-label="适合">备用方案。app 万一打不开，用这个必定能跑</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>方式</th><th>怎么用</th><th>适合</th></tr></thead><tbody><tr><td data-label="方式"><strong>① 原生 app（推荐）</strong></td><td data-label="怎么用">从「应用程序」打开 <strong>LUT批量导出器</strong></td><td data-label="适合">独立 Mac 窗口，不开浏览器、没有标签页、不会因为浏览器卡住而丢进度</td></tr><tr><td data-label="方式">② 终端 + 浏览器</td><td data-label="怎么用">双击工具包里的 <code>启动.command</code></td><td data-label="适合">备用方案。app 万一打不开，用这个必定能跑</td></tr></tbody></table></div>
 <p>原生 app 的样子和浏览器里一模一样，但它是自己的窗口：</p>
 <ul><li>关窗口 / ⌘Q 退出时，后台服务和 ffmpeg 一起结束，不留残余进程</li><li>强制退出 app 也不会留下后台进程（3 秒内自动清理）</li><li>快捷键：<code>⌘R</code> 重载界面、<code>⌘[</code> 返回主界面、<code>⌘0</code> 实际大小、<code>⌘Q</code> 退出</li><li><strong>页面关掉不影响正在跑的批处理</strong>——任务在后台服务里跑，重新打开界面还能看到实时进度</li></ul>
-<blockquote>想换电脑用：把<strong>整个工具文件夹</strong>拷过去（不要只拷 <code>.app</code>，它要靠旁边的 <code>程序/</code> 目录干活）。</blockquote>
+<blockquote>想换电脑用：把 dmg 拷过去，在新电脑上照上面三步装一遍即可。</blockquote>
 <hr>
 <h2 id="这个工具是什么">这个工具是什么</h2>
 <p>一句话：<strong>拖一个文件夹进来，选一个 LUT，点开始，去干别的。</strong></p>
@@ -92,7 +99,7 @@ tbody tr:nth-child(even){background:color-mix(in srgb,var(--line) 22%,transparen
 <div class="tw"><table><thead><tr><th>区块</th><th>干什么</th></tr></thead><tbody><tr><td data-label="区块"><strong>① 素材文件夹</strong></td><td data-label="干什么">指定灰片在哪，自动找出所有视频（含子文件夹），<strong>逐条体检</strong>并自动判断素材是不是 Log 灰片</td></tr><tr><td data-label="区块"><strong>② LUT 库</strong></td><td data-label="干什么">指定 <code>.cube</code> 文件在哪，列出全部 LUT；可搜、可收藏、可看最近用过；填进「① 转换」和「② 风格」两个槽</td></tr><tr><td data-label="区块"><strong>③ 输出设置</strong></td><td data-label="干什么">输出格式、<strong>一次出多个画幅</strong>、音频处理、画面微调、导出到哪里</td></tr><tr><td data-label="区块"><strong>④ 运行</strong></td><td data-label="干什么">进度条、实时日志、失败原因、剩余时间、<strong>导出报告</strong></td></tr><tr><td data-label="区块"><strong>✦ 试色板</strong></td><td data-label="干什么">先只抽一帧，把一堆 LUT 各套一遍排成网格看效果，挑好了再批量跑</td></tr></tbody></table></div>
 <hr>
 <h2 id="30-秒快速上手">30 秒快速上手</h2>
-<ol><li>双击 <strong><code>LUT批量导出器.app</code></strong>（第一次打开如果提示「无法验证开发者」，右键点它 → 选「打开」→ 再点「打开」）</li><li>第 ① 栏点「选择」→ 选中你放着灰片的文件夹</li><li><strong>看第 ① 栏那个「Log 识别」框</strong>：工具会告诉你这批素材是不是灰片、依据是什么</li><li>点框里的 <strong>「按识别结果自动挑转换 LUT」</strong>，它会从你的 LUT 库里挑一个匹配的填进 ① 槽</li></ol>
+<ol><li>打开 <strong>LUT批量导出器</strong>（第一次打开如果提示「无法验证开发者」，右键点它 → 选「打开」→ 再点「打开」）</li><li>第 ① 栏点「选择」→ 选中你放着灰片的文件夹</li><li><strong>看第 ① 栏那个「Log 识别」框</strong>：工具会告诉你这批素材是不是灰片、依据是什么</li><li>点框里的 <strong>「按识别结果自动挑转换 LUT」</strong>，它会从你的 LUT 库里挑一个匹配的填进 ① 槽</li></ol>
 <ul><li>如果库里没有转换 LUT，框下面会亮一条橙色警告，告诉你需要先准备一个</li></ul>
 <ol><li>想再叠一个风格 LUT，就找到它，点右边 <strong>②</strong></li><li>第 ③ 栏选 <strong>HEVC 10bit（发平台）</strong>，再选一个导出文件夹</li><li>点右下角 <strong>开始批量导出</strong></li></ol>
 <p>导出完，点日志下方的「📂 打开导出文件夹」直接看片；点「📄 导出报告」看这一批的详细清单。</p>
@@ -255,14 +262,15 @@ tbody tr:nth-child(even){background:color-mix(in srgb,var(--line) 22%,transparen
 <p><strong>Q：为什么我的素材目录里多了一堆 <code>_LUT</code> 后缀的文件？</strong> A：那是<strong>导出结果</strong>，不是原片。如果你把「导出位置」设成了素材目录（或者留空），输出和原片就会混在一起。建议把导出目录单独指定一个文件夹。混在一起也不影响使用，但下次扫描会把它们也当素材扫进来。</p>
 <hr>
 <h2 id="数据安全与免责">数据安全与免责</h2>
-<ul><li><strong>全程本地处理</strong>。不联网、不上传、不遥测、不需要账号。工具只监听本机回环地址 <code>127.0.0.1</code>，同一个 Wi-Fi 下的其它设备也访问不到。</li><li><strong>不修改原始素材</strong>。只读打开，只写新文件。</li><li><strong>唯一的网络行为</strong>是启动时在浏览器打开本地地址，仅此。</li><li>工具会记住上次用的文件夹和设置，存在 <code>程序/config.json</code>；收藏的 LUT 存在 <code>程序/lut_fav.json</code>；LUT 用途的判定结果缓存在 <code>程序/lut_meta.json</code>。都是纯本地文本，随时可以删（删了就是恢复默认 / 重新分析一遍）。</li><li>运行日志、试色板临时图、素材信息缓存都存在 <code>运行记录/</code> 目录里，可以随时清空，不影响功能。</li><li>这不是商业产品，没有付费、没有激活、没有后门。代码全部是纯文本，<code>程序/server.py</code>、<code>程序/lut_analyze.py</code> 和 <code>程序/static/index.html</code>，你随时可以让任何一个懂 Python 的人逐行检查。</li><li>唯一的外部依赖是 ffmpeg（开源，GPL/LGPL）和 macOS 自带的 Python 3。</li></ul>
+<ul><li><strong>全程本地处理</strong>。不联网、不上传、不遥测、不需要账号。工具只监听本机回环地址 <code>127.0.0.1</code>，同一个 Wi-Fi 下的其它设备也访问不到。</li><li><strong>不修改原始素材</strong>。只读打开，只写新文件。</li><li><strong>唯一的网络行为</strong>是启动时在浏览器打开本地地址，仅此。</li><li>工具会记住上次用的文件夹和设置（<code>config.json</code>）、收藏的 LUT（<code>lut_fav.json</code>）、LUT 用途判定缓存（<code>lut_meta.json</code>），都是纯本地文本，随时可以删（删了就是恢复默认 / 重新分析一遍）。</li><li>运行日志、试色板临时图、素材信息缓存都在 <code>运行记录/</code> 目录里，可以随时清空，不影响功能。</li><li><strong>装在「应用程序」里（dmg 安装版）时</strong>，以上全部在 <code>~/Library/Application Support/LUT批量导出器/</code>，不会写进 app 包（app 包是只读的）。菜单 <strong>LUT 批量导出器 → 打开数据文件夹</strong> 直接跳过去。</li><li><strong>用工具包文件夹（源码展开版）时</strong>，设置留在 <code>程序/</code> 里，日志留在工具包根目录的 <code>运行记录/</code>。</li><li>这不是商业产品，没有付费、没有激活、没有后门。代码全部是纯文本，<code>程序/server.py</code>、<code>程序/lut_analyze.py</code> 和 <code>程序/static/index.html</code>，你随时可以让任何一个懂 Python 的人逐行检查。</li><li>唯一的外部依赖是 ffmpeg（开源，GPL/LGPL）和 macOS 自带的 Python 3。</li></ul>
 <hr>
 <h2 id="目录里都有什么">目录里都有什么</h2>
-<p>日常使用只需要碰前三项：</p>
+<p><strong>dmg 安装版</strong>：你只会接触到两样东西 —— 「应用程序」里的 <code>LUT批量导出器</code>，和 <code>~/Library/Application Support/LUT批量导出器/</code>（设置与记录）。代码在 app 内部，不需要管。</p>
+<p><strong>工具包展开版</strong>（从源码跑、或者拿到的是文件夹而不是 dmg）：</p>
 <div class="tw"><table><thead><tr><th>路径</th><th>是干什么的</th></tr></thead><tbody><tr><td data-label="路径"><strong><code>LUT批量导出器.app</code></strong></td><td data-label="是干什么的"><strong>推荐入口</strong>，双击打开原生窗口</td></tr><tr><td data-label="路径"><code>启动.command</code></td><td data-label="是干什么的">备用入口，双击用浏览器打开</td></tr><tr><td data-label="路径"><code>使用说明.html</code></td><td data-label="是干什么的">就是你正在看的这份说明的网页版</td></tr></tbody></table></div>
 <p>其余都是程序内部文件，正常使用不需要打开：</p>
 <div class="tw"><table><thead><tr><th>路径</th><th>是干什么的</th></tr></thead><tbody><tr><td data-label="路径"><code>程序/</code></td><td data-label="是干什么的">运行必需（后端、界面、内置还原曲线）</td></tr><tr><td data-label="路径"><code>开发/</code></td><td data-label="是干什么的">源码和维护工具，只有改代码或排查问题才用</td></tr><tr><td data-label="路径"><code>运行记录/</code></td><td data-label="是干什么的">日志、试色板临时图、缓存，随时可清空</td></tr></tbody></table></div>
-<blockquote><code>.app</code> 不能单独拖到「应用程序」文件夹——它要靠旁边的 <code>程序/</code> 干活。要移动就整个文件夹一起移，或者给 <code>.app</code> 做个替身。</blockquote>
+<blockquote>工具包里的 <code>.app</code> 是<strong>轻外壳</strong>，要靠旁边的 <code>程序/</code> 干活，所以不能单独拖走。想装进「应用程序」请用 dmg 版本（那里的 <code>.app</code> 是自包含的）。</blockquote>
 </main>
 </body>
 </html>

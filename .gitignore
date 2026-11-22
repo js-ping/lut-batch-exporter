@@ -17,3 +17,9 @@ __pycache__/
 
 # 编译中间产物
 /tmp/LUTBatch_build
+
+# 安装包（体积大的二进制，走 Release 分发）
+*.dmg
+
+# 旧版本快照（11MB，历史靠 git tag 和 Release 回溯，不入库）
+_历史版本/
