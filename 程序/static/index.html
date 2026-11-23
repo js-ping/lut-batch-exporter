@@ -83,6 +83,12 @@ select{font-family:-apple-system,sans-serif;font-size:12.5px;cursor:pointer}
 
 /* ---------- meta chips ---------- */
 .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+/* 单独挑文件时的提示行：让人一眼看出「这不是文件夹，是文件清单」 */
+.pickline{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.pchip{font:11px/1 var(--mono);padding:5px 8px;border-radius:6px;letter-spacing:.2px;
+  background:rgba(224,163,92,.13);border:1px solid rgba(224,163,92,.3);color:#f0b878}
+.pnames{font:11.5px/1.5 var(--mono);color:var(--dim);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip{font:11px/1 var(--mono);padding:5px 8px;border-radius:6px;background:#0f1319;
   border:1px solid var(--line);color:var(--dim);letter-spacing:.2px}
 .chip b{color:var(--txt);font-weight:600}
@@ -342,15 +348,18 @@ input[type=range]{width:100%;accent-color:var(--acc);height:4px;cursor:pointer}
 
   <!-- STEP 1 -->
   <section class="card">
-    <h2><span class="num">1</span>素材文件夹<span class="hint" id="inHint"></span></h2>
+    <h2><span class="num">1</span>素材<span class="hint" id="inHint"></span></h2>
     <div class="row">
-      <input type="text" id="inDir" placeholder="点右边按钮选文件夹，或直接粘贴路径">
-      <button class="btn" onclick="pick('input','inDir')">选择</button>
+      <input type="text" id="inDir" placeholder="选文件夹（含子文件夹），或点「挑文件」单独选几条">
+      <button class="btn" onclick="pick('input','inDir')">选文件夹</button>
+      <button class="btn" onclick="pickFiles()">挑文件</button>
     </div>
     <div class="row">
       <button class="btn ghost sm" onclick="scanInput()">读取素材</button>
       <button class="btn ghost sm" onclick="openDir(document.getElementById('inDir').value)">在访达中打开</button>
+      <button class="btn ghost sm" onclick="clearInputs()">清空</button>
     </div>
+    <div class="pickline" id="inPicked" style="display:none"></div>
     <div class="meta" id="inMeta"></div>
 
     <div class="logbox" id="logBox">
@@ -555,6 +564,7 @@ const S = {
   aspects:new Set(['source']), audioMode:'keep', fav:new Set(), recent:[],
   favOnly:false, logInfo:null, logOverride:'auto', filterRecent:false,
   builtin:[], hidden:new Set(), domFilter:'all', est:null,
+  picked:[],   // 单独挑出来的文件（非空时优先于文件夹）
   // 勾选交互：anchor = Shift 范围选择的锚点；paint* = 鼠标拖动刷选
   anchor:null, painting:false, paintOn:true, paintTouched:null,
   grade:{exposure:0, contrast:1, saturation:1, temperature:0}
@@ -663,7 +673,8 @@ async function boot(){
     }
     if(cfg.intensity){ $('intensity').value=Math.round(cfg.intensity*100); $('iLabel').textContent=Math.round(cfg.intensity*100)+'%' }
     if(cfg.log_override){ S.logOverride=cfg.log_override; $('logOverride').value=cfg.log_override }
-    if(cfg.input_dir) scanInput(true);
+    if(Array.isArray(cfg.files) && cfg.files.length) scanFiles(cfg.files);
+    else if(cfg.input_dir) scanInput(true);
     if(cfg.lut_dir){ await scanLut(true); if(cfg.luts) cfg.luts.forEach((p,i)=>{ if(p) setSlot(i+1,p,true) }) }
   }catch(err){ toast(err.message,true) }
 }
@@ -696,6 +707,9 @@ window.__nativePickResult = function(kind, path){
   else if(target==='outDir') setFmt(S.fmt);
 };
 
+// 原生面板选完多个文件后由 Swift 调回来
+window.__nativePickFiles = function(paths){ if(paths && paths.length) scanFiles(paths) };
+
 /* ---------------- 扫描素材 + 体检 ---------------- */
 async function scanInput(silent){
   const dir = $('inDir').value.trim();
@@ -703,40 +717,96 @@ async function scanInput(silent){
   $('inHint').textContent='读取并体检中…';
   try{
     const r = await api('/api/scan_input',{dir});
-    S.files = r.files; S.sample = r.sample||{};
-    $('inHint').textContent='';
-    const s=S.sample, m=$('inMeta');
-    if(!r.count){
-      m.innerHTML='<span class="chip bad">这个文件夹里没有视频文件</span>';
-      $('filesBox').classList.remove('on');
-      $('logBox').classList.remove('on');
-      $('sumFiles').textContent='0'; updateSum(); return;
-    }
-    $('sumFiles').textContent=r.count;
-    const chips=[];
-    chips.push(`<span class="chip"><b>${r.count}</b> 条 · <b>${human(r.total_size)}</b></span>`);
-    if(s.codec) chips.push(`<span class="chip"><b>${codecName(s.codec)}</b> ${s.profile||''}</span>`);
-    if(s.width) chips.push(`<span class="chip"><b>${s.width}×${s.height}</b></span>`);
-    if(s.fps) chips.push(`<span class="chip"><b>${s.fps}</b> fps</span>`);
-    if(s.bit_depth) chips.push(`<span class="chip">${s.pix_fmt} · ${s.bit_depth}bit</span>`);
-    if(s.duration) chips.push(`<span class="chip">${fmtDur(s.duration)}</span>`);
-    const known = v => v && v!=='unknown' && v!=='reserved';
-    if(known(s.color_primaries)) chips.push(`<span class="chip">${s.color_primaries}${known(s.color_transfer)?' / '+s.color_transfer:''}</span>`);
-    if(s.audio) chips.push(`<span class="chip">音频 ${s.audio} ${s.audio_channels||''}ch</span>`);
-    m.innerHTML = chips.join('');
-
-    renderLogBox(r.log);
-    renderPreWarn(r.precheck, r.count);
-
-    $('pvFile').value = (r.files[0]||{}).path||'';
-    const fb=$('filesBox');
-    fb.classList.add('on');
-    $('tipBox').style.display='none';
-    renderFileList(r.files, r.count);
-    $('filesNote').textContent = r.count+' 条';
-    updateSum();
+    S.picked=[]; renderPicked();
+    applyScan(r);
     if(!silent) toast('找到 '+r.count+' 条素材');
   }catch(e){ $('inHint').textContent=''; toast(e.message,true) }
+}
+
+/* 挑单条文件（原生面板多选；浏览器模式走本地服务端的系统对话框） */
+async function pickFiles(){
+  const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickFiles;
+  if(native){ native.postMessage('files'); return }
+  try{
+    const r = await api('/api/dialog',{kind:'files'});
+    if(r.canceled || !r.paths || !r.paths.length) return;
+    scanFiles(r.paths);
+  }catch(e){ toast('打开选择框失败，可直接把文件拖进窗口', true) }
+}
+
+async function scanFiles(paths){
+  if(!paths || !paths.length) return;
+  S.picked = paths.slice();
+  $('inDir').value='';            // 文件模式下清掉文件夹，避免两种来源混着看
+  $('inHint').textContent='读取并体检中…';
+  renderPicked();
+  try{
+    const r = await api('/api/scan_files',{paths});
+    applyScan(r);
+    if(r.missing && r.missing.length) toast(r.missing.length+' 个文件已不存在，已跳过', true);
+    else toast('已选 '+r.count+' 条素材');
+  }catch(e){ $('inHint').textContent=''; toast(e.message,true) }
+}
+
+/* 素材栏渲染：文件夹和文件两条路都走这里 */
+function applyScan(r){
+  S.files = r.files||[]; S.sample = r.sample||{};
+  $('inHint').textContent='';
+  const s=S.sample, m=$('inMeta');
+  if(!r.count){
+    m.innerHTML='<span class="chip bad">'+(S.picked.length?'选中的文件都不是视频':'这个文件夹里没有视频文件')+'</span>';
+    $('filesBox').classList.remove('on');
+    $('logBox').classList.remove('on');
+    $('sumFiles').textContent='0'; updateSum(); return;
+  }
+  $('sumFiles').textContent=r.count;
+  const chips=[];
+  chips.push(`<span class="chip"><b>${r.count}</b> 条 · <b>${human(r.total_size)}</b></span>`);
+  if(s.codec) chips.push(`<span class="chip"><b>${codecName(s.codec)}</b> ${s.profile||''}</span>`);
+  if(s.width) chips.push(`<span class="chip"><b>${s.width}×${s.height}</b></span>`);
+  if(s.fps) chips.push(`<span class="chip"><b>${s.fps}</b> fps</span>`);
+  if(s.bit_depth) chips.push(`<span class="chip">${s.pix_fmt} · ${s.bit_depth}bit</span>`);
+  if(s.duration) chips.push(`<span class="chip">${fmtDur(s.duration)}</span>`);
+  const known = v => v && v!=='unknown' && v!=='reserved';
+  if(known(s.color_primaries)) chips.push(`<span class="chip">${s.color_primaries}${known(s.color_transfer)?' / '+s.color_transfer:''}</span>`);
+  if(s.audio) chips.push(`<span class="chip">音频 ${s.audio} ${s.audio_channels||''}ch</span>`);
+  m.innerHTML = chips.join('');
+
+  renderLogBox(r.log);
+  renderPreWarn(r.precheck, r.count);
+
+  $('pvFile').value = (r.files[0]||{}).path||'';
+  const fb=$('filesBox');
+  fb.classList.add('on');
+  $('tipBox').style.display='none';
+  renderFileList(r.files, r.count);
+  $('filesNote').textContent = r.count+' 条';
+  updateSum();
+}
+
+/* 「已单独选中 N 个文件」提示行 */
+function renderPicked(){
+  const box=$('inPicked');
+  if(!box) return;
+  if(!S.picked || !S.picked.length){ box.style.display='none'; box.innerHTML=''; return }
+  const names=S.picked.map(p=>p.split('/').pop());
+  const head = names.slice(0,3).join('、') + (names.length>3 ? ' 等' : '');
+  box.style.display='';
+  box.innerHTML =
+    `<span class="pchip">单独选中 ${S.picked.length} 个文件</span>`+
+    `<span class="pnames" title="${esc(S.picked.join('\n'))}">${esc(head)}</span>`;
+}
+
+function clearInputs(){
+  S.files=[]; S.sample={}; S.picked=[]; S.logInfo=null;
+  $('inDir').value=''; $('inMeta').innerHTML=''; $('inHint').textContent='';
+  $('logBox').classList.remove('on'); $('preWarn').innerHTML=''; $('preWarn').classList.remove('on');
+  $('filesBox').classList.remove('on'); $('filesList').innerHTML='';
+  $('sumFiles').textContent='0';
+  $('pvFile').value='';
+  renderPicked(); updateSum();
+  if(S.est){ S.est=null; const t=$('tline'); if(t) t.innerHTML='' }
+  toast('已清空素材选择');
 }
 
 function logBadge(t, inferred){
@@ -1337,6 +1407,7 @@ function reqEstimate(){
 function estPayload(){
   return {
     input_dir: $('inDir').value.trim(),
+    files: S.picked,
     output_dir: $('outDir').value.trim(),
     format: S.fmt, quality: S.quality, aspects: [...S.aspects],
     suffix: $('suffix').value, skip_existing: $('skipExist').checked,
@@ -1482,6 +1553,7 @@ function askModal(title, body, okText, cancelText){
 async function startJob(){
   const payload={
     input_dir: $('inDir').value.trim(),
+    files: S.picked,
     output_dir: $('outDir').value.trim(),
     lut_dir: $('lutDir').value.trim(),
     luts: [S.slots[1],S.slots[2]].filter(Boolean),

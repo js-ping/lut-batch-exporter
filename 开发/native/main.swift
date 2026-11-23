@@ -4,6 +4,7 @@
 
 import Cocoa
 import WebKit
+import UniformTypeIdentifiers
 
 // ---------------------------------------------------------------- 工具函数
 
@@ -139,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         let conf = WKWebViewConfiguration()
         conf.userContentController.add(self, name: "pickFolder")
+        conf.userContentController.add(self, name: "pickFiles")
         conf.preferences.setValue(true, forKey: "developerExtrasEnabled")
 
         webView = WKWebView(frame: rect, configuration: conf)
@@ -253,6 +255,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     // ---- JS ⇄ 原生 桥：选文件夹
     func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "pickFiles" {
+            DispatchQueue.main.async { self.openFilePanel() }
+            return
+        }
         guard message.name == "pickFolder" else { return }
         let kind = (message.body as? String) ?? "input"
         DispatchQueue.main.async { self.openPanel(kind: kind) }
@@ -347,6 +353,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let path = (resp == .OK) ? (panel.url?.path ?? "") : ""
         let js = "window.__nativePickResult(\(jsQuote(kind)), \(jsQuote(path)))"
         webView.evaluateJavaScript(js) { _, _ in }
+    }
+
+    // ---- 挑单条素材文件（可多选）
+    func openFilePanel() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = true
+        panel.showsHiddenFiles = false
+        panel.message = "选择要处理的视频文件（按住 ⌘ 或 Shift 可多选）"
+        panel.prompt = "加入素材"
+        if #available(macOS 11.0, *) {
+            panel.allowedContentTypes = [.movie, .quickTimeMovie, .mpeg4Movie]
+        } else {
+            panel.allowedFileTypes = ["mov", "MOV", "mp4", "MP4", "m4v", "M4V"]
+        }
+
+        guard panel.runModal() == .OK else { return }
+        let paths = panel.urls.map { $0.path }
+        let arr = paths.map { jsQuote($0) }.joined(separator: ",")
+        webView.evaluateJavaScript("window.__nativePickFiles([\(arr)])") { _, _ in }
     }
 
     // ---- 导航：外链丢给系统浏览器

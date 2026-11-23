@@ -25,7 +25,7 @@ import lut_analyze
 
 APP_NAME = "LUT 批量导出器"        # 界面上显示的名字，带空格好看
 BUNDLE = "LUT批量导出器"           # 落在磁盘上的名字，不带空格（跟 .app 一致）
-VERSION = "1.7.1"
+VERSION = "1.8.0"
 
 # ---------------------------------------------------------------- 目录布局
 #
@@ -559,6 +559,41 @@ def list_videos(folder):
     return items
 
 
+def make_item(path):
+    """把一个具体文件变成和 list_videos 同构的条目。"""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    name = os.path.basename(path)
+    return {"name": name, "rel": name, "path": path, "size": st.st_size}
+
+
+def is_video_file(path):
+    return str(path).lower().endswith((".mov", ".mp4", ".m4v"))
+
+
+def collect_inputs(cfg):
+    """素材清单的唯一入口：显式选中的文件优先，没有就扫文件夹。
+
+    两种模式（选文件夹 / 挑单条文件）走的都是这一条路，
+    所以开始导出、预估、体检拿到的永远是同一份清单。
+    """
+    picked = []
+    for p in (cfg.get("files") or []):
+        if not isinstance(p, str) or not is_video_file(p):
+            continue
+        if os.path.isfile(p):
+            it = make_item(p)
+            if it:
+                picked.append(it)
+    if picked:
+        picked.sort(key=lambda x: natural_key(x["name"]))
+        return picked
+    folder = cfg.get("input_dir") or ""
+    return list_videos(folder) if (folder and os.path.isdir(folder)) else []
+
+
 def load_lut_meta():
     d = load_json(LUT_META_PATH, {})
     return d if isinstance(d, dict) else {}
@@ -698,6 +733,27 @@ def pick_folder(prompt):
     except Exception as e:
         print("[选择文件夹] 异常：%s" % e, flush=True)
         return None
+
+
+def pick_files(prompt):
+    """调起 macOS 原生「选择文件」对话框，支持多选。返回路径列表。"""
+    script = ('set theFiles to choose file with prompt %s with multiple selections allowed\n'
+              'set out to ""\n'
+              'repeat with f in theFiles\n'
+              '  set out to out & POSIX path of f & linefeed\n'
+              'end repeat\n'
+              'return out') % _as_apple_string(prompt)
+    try:
+        r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=600)
+        if r.returncode == 0:
+            return [x.strip() for x in r.stdout.splitlines() if x.strip()]
+        err = (r.stderr or "").strip()
+        if err and "-128" not in err:      # -128 = 用户取消
+            print("[选择文件] osascript 报错：%s" % err, flush=True)
+        return []
+    except Exception as e:
+        print("[选择文件] 异常：%s" % e, flush=True)
+        return []
 
 
 def notify(title, message):
@@ -1160,7 +1216,7 @@ def precheck(info):
 
 def run_job(cfg):
     global JOB
-    src_dir = cfg["input_dir"]
+    src_dir = cfg.get("input_dir") or ""
     out_dir = cfg["output_dir"]
     fmt_key = cfg.get("format", "hevc")
     enc = ENCODERS[fmt_key]
@@ -1176,7 +1232,7 @@ def run_job(cfg):
         "audio_mode": cfg.get("audio_mode", "keep"),
     }
 
-    files = list_videos(src_dir)
+    files = collect_inputs(cfg)
     tasks = [(it, a) for it in files for a in aspects]
     with JOB_LOCK:
         JOB["total"] = len(tasks)
@@ -1184,7 +1240,7 @@ def run_job(cfg):
 
     jlog("发现 %d 条素材 × %d 个画幅 = %d 个输出任务" % (len(files), len(aspects), len(tasks)))
     try:
-        if (os.path.abspath(out_dir).rstrip("/") == os.path.abspath(src_dir).rstrip("/")):
+        if src_dir and (os.path.abspath(out_dir).rstrip("/") == os.path.abspath(src_dir).rstrip("/")):
             jlog("⚠ 导出目录和素材目录是同一个，输出会和原片混在一起，"
                  "下次扫描还会把导出结果当成素材", "warn")
     except Exception:
@@ -1591,11 +1647,17 @@ class Handler(BaseHTTPRequestHandler):
             kind = d.get("kind", "input")
             prompt = {"input": "选择素材文件夹", "output": "选择导出文件夹",
                       "lut": "选择 LUT 文件夹"}.get(kind, "选择文件夹")
+            if kind == "files":
+                paths = pick_files("选择要处理的素材文件（可按住 ⌘ 多选）")
+                return self._json({"paths": paths, "canceled": not paths})
             path = pick_folder(prompt)
             return self._json({"path": path, "canceled": path is None})
 
         if p == "/api/scan_input":
             return self._scan_input(d)
+
+        if p == "/api/scan_files":
+            return self._scan_files(d)
 
         if p == "/api/scan_lut":
             folder = d.get("dir") or ""
@@ -1641,11 +1703,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(fav)
 
         if p == "/api/estimate":
-            folder = d.get("input_dir") or ""
-            if not os.path.isdir(folder):
-                return self._json({"error": "文件夹不存在"}, 400)
-            files = list_videos(folder)
+            files = collect_inputs(d)
             if not files:
+                folder = d.get("input_dir") or ""
+                # 既没选文件、文件夹也不存在 → 报错；否则只是空文件夹，给 0 就行
+                if not (d.get("files") or []) and not os.path.isdir(folder):
+                    return self._json({"error": "素材文件夹不存在"}, 400)
                 return self._json({"tasks": 0, "todo": 0, "skip": 0, "media_sec": 0,
                                    "est_sec": 0, "media_txt": "00:00",
                                    "est_txt": "00:00", "speed": 0, "rough": True})
@@ -1658,8 +1721,9 @@ class Handler(BaseHTTPRequestHandler):
             with JOB_LOCK:
                 if JOB["running"]:
                     return self._json({"error": "已有任务在跑"}, 400)
-            if not d.get("input_dir") or not os.path.isdir(d["input_dir"]):
-                return self._json({"error": "素材文件夹无效"}, 400)
+            picked = [x for x in (d.get("files") or []) if isinstance(x, str) and os.path.isfile(x)]
+            if not picked and (not d.get("input_dir") or not os.path.isdir(d["input_dir"])):
+                return self._json({"error": "请先选素材文件夹，或至少挑一条素材文件"}, 400)
             if not d.get("output_dir"):
                 return self._json({"error": "请选择导出文件夹"}, 400)
             if not FFMPEG:
@@ -1678,6 +1742,7 @@ class Handler(BaseHTTPRequestHandler):
                 })
             save_config({
                 "input_dir": d.get("input_dir"), "output_dir": d.get("output_dir"),
+                "files": picked,
                 "lut_dir": d.get("lut_dir"), "luts": d.get("luts", []),
                 "format": d.get("format", "hevc"), "quality": d.get("quality", "normal"),
                 "intensity": d.get("intensity", 1.0), "matrix": d.get("matrix", "auto"),
@@ -1725,7 +1790,30 @@ class Handler(BaseHTTPRequestHandler):
         folder = d.get("dir") or ""
         if not os.path.isdir(folder):
             return self._json({"error": "文件夹不存在"}, 400)
-        files = list_videos(folder)
+        return self._json(self._scan_report(list_videos(folder)))
+
+    def _scan_files(self, d):
+        """只体检明确挑出来的几条文件（不扫文件夹）。"""
+        paths = [p for p in (d.get("paths") or []) if isinstance(p, str)]
+        files, missing = [], []
+        for p in paths:
+            if os.path.isfile(p) and is_video_file(p):
+                it = make_item(p)
+                if it:
+                    files.append(it)
+                    continue
+            missing.append(os.path.basename(p) or p)
+        files.sort(key=lambda x: natural_key(x["name"]))
+        rep = self._scan_report(files)
+        if missing:
+            rep["missing"] = missing[:20]
+        return self._json(rep)
+
+    def _scan_report(self, files):
+        """素材清单 → 体检结果。选文件夹和挑文件共用这一段。"""
+        if not files:
+            return {"count": 0, "files": [], "total_size": 0, "sample": {},
+                    "log": None, "precheck": {"counts": {}, "warnings": []}}
 
         # 全部素材都体检一遍（首次慢一点，之后走缓存）
         counts = {"ok": 0, "warn": 0, "reject": 0}
@@ -1765,14 +1853,10 @@ class Handler(BaseHTTPRequestHandler):
         sample = files[0]["info"] if files else {}
         summary = summarize_log(files, judged)
 
-        return self._json({
-            "count": len(files),
-            "files": files[:600],
-            "total_size": sum(f["size"] for f in files),
-            "sample": sample,
-            "log": summary,
-            "precheck": {"counts": counts, "warnings": warnings},
-        })
+        return {"count": len(files), "files": files[:600],
+                "total_size": sum(f["size"] for f in files),
+                "sample": sample, "log": summary,
+                "precheck": {"counts": counts, "warnings": warnings}}
 
     # ---- 试色板
     def _preview(self, d):

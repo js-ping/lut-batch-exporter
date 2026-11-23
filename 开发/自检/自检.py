@@ -125,7 +125,8 @@ def main():
         need = {"画幅多选": "aspects", "音频模式": "audio_mode", "画面微调": "gExposure",
                 "逐条体检": "renderFileList", "Log 识别框": "renderLogBox",
                 "收藏": "lutfav", "灰片拦截提示": "checkConvWarn",
-                "LUT 用途筛选": "setDomFilter", "时长预估": "paintTime"}
+                "LUT 用途筛选": "setDomFilter", "时长预估": "paintTime",
+                "挑单条文件": "pickFiles", "清空素材": "clearInputs"}
         miss = [k for k, v in need.items() if v not in html]
         if miss:
             bad("界面缺少功能模块", "、".join(miss))
@@ -785,15 +786,71 @@ print(json.dumps({"expanded": m.EXPANDED, "data": m.DATA,
         else:
             bad("不可写目录没有降级", got["records"])
 
-        if got["version"] == "1.7.1":
+        if got["version"] == "1.8.0":
             ok("版本号一致：v%s" % got["version"])
         else:
             bad("版本号不一致", got["version"])
     except Exception as e:
         bad("目录布局测试", str(e))
 
+    # ---------- 17 选文件模式（不只认文件夹）----------
+    section("17. 素材来源：文件夹 / 挑单条文件 / 清空")
+
+    try:
+        all_clips = S.list_videos(clips_dir)
+        picked = [c["path"] for c in all_clips[:2]]
+
+        got = S.collect_inputs({"input_dir": clips_dir, "files": []})
+        if len(got) == len(all_clips):
+            ok("只给文件夹 → 扫出全部 %d 条" % len(got))
+        else:
+            bad("文件夹模式清单不对", "%d ≠ %d" % (len(got), len(all_clips)))
+
+        got = S.collect_inputs({"input_dir": clips_dir, "files": picked})
+        if [g["path"] for g in got] == picked:
+            ok("只给文件 → 就用这 %d 条，不扫文件夹" % len(got))
+        else:
+            bad("文件模式清单不对", "%d 条" % len(got))
+
+        # 文件优先于文件夹：两边都给时听文件的
+        got = S.collect_inputs({"input_dir": clips_dir, "files": picked[:1]})
+        if len(got) == 1 and got[0]["path"] == picked[0]:
+            ok("文件和文件夹同时存在 → 文件优先")
+        else:
+            bad("优先级不对", "%d 条" % len(got))
+
+        # 文件都不在了 → 退回文件夹，别直接空手
+        got = S.collect_inputs({"input_dir": clips_dir,
+                                "files": ["/tmp/不存在_%d.mov" % time.time()]})
+        if len(got) == len(all_clips):
+            ok("选中的文件已删除 → 自动退回扫文件夹")
+        else:
+            bad("失效文件没退回文件夹", "%d 条" % len(got))
+
+        # 非视频文件要被挡掉
+        jpg = os.path.join(tmp, "x.jpg")
+        open(jpg, "wb").write(b"0")
+        got = S.collect_inputs({"input_dir": "", "files": [jpg]})
+        if got == []:
+            ok("非视频文件被挡掉（只认 mov/mp4/m4v）")
+        else:
+            bad("非视频文件混进来了", str(got[:2]))
+
+        # 导出时用的清单和体检时一致：文件模式也能算出任务数
+        plan = S.estimate_plan({"format": "h264", "quality": "normal",
+                                "aspects": ["source"], "output_dir": out_dir,
+                                "suffix": "_P", "skip_existing": True, "luts": [],
+                                "intensity": 1.0},
+                               S.collect_inputs({"input_dir": "", "files": picked}))
+        if plan["tasks"] == len(picked):
+            ok("只挑文件也能预估：%d 个任务，%s" % (plan["tasks"], plan["est_txt"]))
+        else:
+            bad("文件模式预估任务数不对", str(plan.get("tasks")))
+    except Exception as e:
+        bad("选文件模式测试", str(e))
+
     # ---------- 17 整批判定（未判定不该成片出现）----------
-    section("17. 整批 Log 结论（素材多了也不能全变「未判定」）")
+    section("18. 整批 Log 结论（素材多了也不能全变「未判定」）")
 
     def fake_batch(types):
         """按给定类型造一批素材，None 表示没判定过。"""
