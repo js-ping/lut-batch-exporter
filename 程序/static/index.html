@@ -695,7 +695,11 @@ async function pick(kind, target){
     if(target==='lutDir') scanLut();
   }catch(e){ toast('打开选择框失败，可直接粘贴路径', true) }
 }
-async function openDir(d){ if(!d) return; try{ await api('/api/open',{dir:d}) }catch(e){} }
+async function openDir(d){
+  if(!d && S.picked.length){ try{ await api('/api/reveal',{path:S.picked[0]}) }catch(e){} return }
+  if(!d) return;
+  try{ await api('/api/open',{dir:d}) }catch(e){}
+}
 
 // 原生面板选完之后由 Swift 调回来
 window.__nativePickResult = function(kind, path){
@@ -1417,7 +1421,7 @@ function estPayload(){
 }
 async function doEstimate(){
   const dir=$('inDir').value.trim();
-  if(!dir || !S.files.length){
+  if((!dir && !S.picked.length) || !S.files.length){
     S.est=null;
     if($('sumDur')) $('sumDur').textContent='—';
     if($('sumTime')) $('sumTime').textContent='—';
@@ -1565,11 +1569,17 @@ async function startJob(){
     grade: S.grade,
     log_override: S.logOverride
   };
-  if(!payload.input_dir) return toast('先选素材文件夹',true);
+  if(!payload.input_dir && !payload.files.length) return toast('先选素材文件夹，或挑几条文件',true);
   if(!payload.output_dir) return toast('先选导出文件夹',true);
   // 同一个目录会把输出和原片混在一起，下次扫描还会把输出当成素材
   const norm = s => String(s||'').replace(/\/+$/,'').trim();
-  if(norm(payload.output_dir) === norm(payload.input_dir)){
+  // 文件模式没有素材文件夹，就拿选中文件所在的目录来比
+  let srcForCompare = payload.input_dir;
+  if(!srcForCompare && payload.files.length){
+    const dirs = [...new Set(payload.files.map(p=>p.replace(/\/[^/]*$/,'')))];
+    if(dirs.length===1) srcForCompare = dirs[0];
+  }
+  if(srcForCompare && norm(payload.output_dir) === norm(srcForCompare)){
     const go = await askModal('导出目录和素材目录是同一个',
       '导出的文件会和原片混在一起，下次扫描还会把导出结果当成素材扫进来（素材数量翻倍、Log 判定也可能被带偏）。\n\n建议换个目录，比如在素材文件夹里新建一个「LUT输出」。',
       '就这样继续', '换个目录');
@@ -1700,12 +1710,12 @@ function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,
 /* ---------------- 试色板 ---------------- */
 function useFirst(){
   if(S.files[0]) $('pvFile').value=S.files[0].path;
-  else toast('先读取素材文件夹',true);
+  else toast('先选素材（文件夹或文件）',true);
 }
 async function runPreview(){
   let path=$('pvFile').value.trim();
   if(!path && S.files[0]) path=S.files[0].path;
-  if(!path) return toast('先读取素材文件夹',true);
+  if(!path) return toast('先选素材（文件夹或文件）',true);
   let list=[...S.checked];
   if(!list.length){
     const kw=$('lutFilter').value.trim().toLowerCase();

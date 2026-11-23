@@ -36,7 +36,7 @@ macOS · 原生窗口 + 本地服务 + ffmpeg · MIT
 
 ## 安装
 
-1. 下载 `LUTBatchExporter_v1.8.0_macOS.dmg`，双击打开，把 `LUT批量导出器` 拖进「应用程序」。
+1. 下载 `LUTBatchExporter_v1.8.1_macOS.dmg`，双击打开，把 `LUT批量导出器` 拖进「应用程序」。
 2. 需要 ffmpeg：`brew install ffmpeg`（没装的话 App 里会直接把这条命令摆给你）。
 3. 从启动台打开。首次打开被系统拦（未公证）：右键 → 打开 → 再打开。
 

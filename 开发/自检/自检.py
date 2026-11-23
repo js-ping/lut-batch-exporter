@@ -132,6 +132,16 @@ def main():
             bad("界面缺少功能模块", "、".join(miss))
         else:
             ok("界面功能模块齐全（%d 项）" % len(need))
+
+        # 只挑文件时不许被「先选素材文件夹」拦住（v1.8.0 的回归 bug）
+        if "!payload.input_dir && !payload.files.length" in html:
+            ok("开始导出的校验认文件模式（只挑文件也能开始）")
+        else:
+            bad("开始导出仍只认文件夹", "找 !payload.input_dir && !payload.files.length")
+        if "(!dir && !S.picked.length) || !S.files.length" in html:
+            ok("文件模式下时长预估也会算")
+        else:
+            bad("文件模式预估被跳过")
     except Exception as e:
         bad("读取界面文件", str(e))
 
@@ -786,7 +796,7 @@ print(json.dumps({"expanded": m.EXPANDED, "data": m.DATA,
         else:
             bad("不可写目录没有降级", got["records"])
 
-        if got["version"] == "1.8.0":
+        if got["version"] == "1.8.1":
             ok("版本号一致：v%s" % got["version"])
         else:
             bad("版本号不一致", got["version"])
